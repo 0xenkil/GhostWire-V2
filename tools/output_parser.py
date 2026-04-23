@@ -1,0 +1,240 @@
+import re
+from utils.logger import get_logger
+
+log = get_logger("output_parser")
+
+class OutputParser:
+    def parse(self, tool: str, stdout: str, stderr: str) -> dict:
+        """
+        Dispatch to per-tool parser. Always returns a dict, never raises.
+        """
+        try:
+            parsers = {
+                "nmap": self._nmap,
+                "masscan": self._masscan,
+                "nikto": self._nikto,
+                "whois": self._whois,
+                "theharvester": self._theharvester,
+                "gobuster": self._gobuster,
+                "dirb": self._dirb,
+                "ffuf": self._ffuf,
+                "enum4linux": self._enum4linux,
+                "hydra": self._hydra,
+                "sqlmap": self._sqlmap,
+                "nuclei": self._nuclei,
+                "wafw00f": self._wafw00f,
+            }
+            parser_fn = parsers.get(tool, self._generic)
+            return parser_fn(stdout, stderr)
+        except Exception as e:
+            log.warning(f"Parser error for {tool}: {e}")
+            return {"raw": stdout[:5000], "parse_error": str(e)}
+
+    def _nmap(self, stdout, stderr) -> dict:
+        open_ports = []
+        services = {}
+        os_guess = ""
+        for line in stdout.splitlines():
+            m = re.match(r'^(\d+)/(tcp|udp)\s+(open|filtered|closed)\s+(\S+)(?:\s+(.*))?', line)
+            if m:
+                port_info = {
+                    "port": int(m.group(1)),
+                    "protocol": m.group(2),
+                    "state": m.group(3),
+                    "service": m.group(4),
+                    "version": m.group(5).strip() if m.group(5) else ""
+                }
+                if m.group(3) == "open":
+                    open_ports.append(port_info["port"])
+                    services[str(m.group(1))] = port_info
+
+            if "OS details:" in line or "Running:" in line:
+                os_guess = line.strip()
+
+        return {
+            "open_ports": open_ports,
+            "services": services,
+            "os_guess": os_guess,
+            "total_open": len(open_ports)
+        }
+
+    def _masscan(self, stdout, stderr) -> dict:
+        """Returns open_ports as list of ints for consistency with nmap."""
+        ports = []
+        port_details = []
+        for line in stdout.splitlines():
+            m = re.search(r'Discovered open port (\d+)/(\w+) on ([\d.]+)', line)
+            if m:
+                port_num = int(m.group(1))
+                if port_num not in ports:
+                    ports.append(port_num)
+                port_details.append({
+                    "port": port_num,
+                    "proto": m.group(2),
+                    "host": m.group(3)
+                })
+        return {"open_ports": ports, "port_details": port_details}
+
+    def _nikto(self, stdout, stderr) -> dict:
+        findings = []
+        skip_prefixes = [
+            "target host:", "target port:", "target ip:",
+            "start time:", "end time:", "0 host(s) tested",
+            "nikto v", "+ no web server found", "multiple ips",
+            "ssl info:", "+ server:"
+        ]
+        for line in stdout.splitlines():
+            # Support + prefix (standard), - prefix, and * prefix (some versions)
+            stripped = None
+            if line.startswith("+ "):
+                stripped = line[2:].strip()
+            elif line.startswith("- "):
+                stripped = line[2:].strip()
+            elif line.startswith("* "):
+                stripped = line[2:].strip()
+
+            if stripped and ":" in stripped:
+                if not any(stripped.lower().startswith(s) for s in skip_prefixes):
+                    findings.append(stripped)
+
+        return {"findings": findings, "count": len(findings)}
+
+    def _whois(self, stdout, stderr) -> dict:
+        result = {}
+        for line in stdout.splitlines():
+            if ":" in line and not line.startswith("%") and not line.startswith("#"):
+                parts = line.split(":", 1)
+                key = parts[0].strip().lower().replace(" ", "_")
+                val = parts[1].strip()
+                if key and val and key not in result:
+                    result[key] = val
+        return result
+
+    def _theharvester(self, stdout, stderr) -> dict:
+        emails, hosts, ips = [], [], []
+        for line in stdout.splitlines():
+            line = line.strip()
+            if re.match(r'^[\w.+-]+@[\w.-]+\.\w+$', line):
+                emails.append(line)
+            elif re.match(r'^[\d.]+$', line) and len(line.split('.')) == 4:
+                ips.append(line)
+            elif re.match(r'^[\w.-]+\.\w{2,}$', line) and '@' not in line:
+                hosts.append(line)
+        return {
+            "emails": list(set(emails)),
+            "hosts": list(set(hosts)),
+            "ips": list(set(ips))
+        }
+
+    def _gobuster(self, stdout, stderr) -> dict:
+        paths = []
+        for line in stdout.splitlines():
+            # Directory mode: /path (Status: 200)
+            m = re.search(r'(/\S*)\s+\(Status:\s*(\d+)\)', line)
+            if m:
+                paths.append({"path": m.group(1), "status": int(m.group(2))})
+                continue
+            # DNS mode: Found: sub.domain.com
+            m2 = re.match(r'^Found:\s*(\S+)', line)
+            if m2:
+                paths.append({"subdomain": m2.group(1), "status": 0})
+        return {"discovered_paths": paths, "count": len(paths)}
+
+    def _dirb(self, stdout, stderr) -> dict:
+        paths = []
+        for line in stdout.splitlines():
+            m = re.match(r'^\+\s+(https?://\S+)', line)
+            if m:
+                paths.append(m.group(1))
+        return {"discovered_paths": paths, "count": len(paths)}
+
+    def _ffuf(self, stdout, stderr) -> dict:
+        paths = []
+        for line in stdout.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            # Verbose mode: /path  [Status: 200, ...]
+            m = re.match(r'^(\S*)\s+\[Status:\s*(\d+)', line)
+            if m:
+                path = m.group(1) if m.group(1) else "/"
+                if path.startswith('http'):
+                    try:
+                        from urllib.parse import urlparse
+                        path = urlparse(path).path
+                    except Exception:
+                        pass
+                paths.append({"path": path, "status": int(m.group(2))})
+            elif line.startswith('/') and ' ' not in line:
+                paths.append({"path": line, "status": 0})
+        return {"discovered_paths": paths, "count": len(paths)}
+
+    def _enum4linux(self, stdout, stderr) -> dict:
+        users, shares = [], []
+        for line in stdout.splitlines():
+            um = re.search(r'user:\[(\w+)\]', line)
+            if um:
+                users.append(um.group(1))
+            sm = re.search(r'Sharename\s+Type.*$', line, re.IGNORECASE)
+            if sm:
+                shares.append(line.strip())
+        return {"users": list(set(users)), "shares": shares}
+
+    def _hydra(self, stdout, stderr) -> dict:
+        creds = []
+        for line in stdout.splitlines():
+            m = re.search(r'\[(\d+)\]\[(\w+)\] host: (\S+)\s+login: (\S+)\s+password: (\S+)', line)
+            if m:
+                creds.append({
+                    "port": m.group(1), "service": m.group(2),
+                    "host": m.group(3), "user": m.group(4), "pass": m.group(5)
+                })
+        return {"credentials": creds, "found": len(creds) > 0}
+
+    def _sqlmap(self, stdout, stderr) -> dict:
+        vulns = []
+        for line in stdout.splitlines():
+            if "is vulnerable" in line.lower() or "sql injection" in line.lower():
+                vulns.append(line.strip())
+        return {"vulnerabilities": vulns, "vulnerable": len(vulns) > 0}
+
+    def _nuclei(self, stdout, stderr) -> dict:
+        """Parse nuclei JSONL output."""
+        findings = []
+        for line in stdout.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                import json
+                data = json.loads(line)
+                findings.append({
+                    "template_id": data.get("template-id", ""),
+                    "name": data.get("info", {}).get("name", ""),
+                    "severity": data.get("info", {}).get("severity", "info"),
+                    "matched": data.get("matched-at", ""),
+                    "type": data.get("type", ""),
+                })
+            except Exception:
+                # Non-JSON line (progress output etc)
+                pass
+        return {"findings": findings, "count": len(findings)}
+
+    def _wafw00f(self, stdout, stderr) -> dict:
+        waf_name = None
+        is_behind_waf = False
+        for line in stdout.splitlines():
+            if "is behind" in line.lower():
+                is_behind_waf = True
+                # Extract WAF name
+                m = re.search(r'is behind (.+?)(?:\s*\(|$)', line, re.IGNORECASE)
+                if m:
+                    waf_name = m.group(1).strip()
+        return {"is_behind_waf": is_behind_waf, "waf_name": waf_name}
+
+    def _generic(self, stdout, stderr) -> dict:
+        return {
+            "raw_lines": stdout.splitlines()[:200],
+            "line_count": len(stdout.splitlines()),
+            "has_errors": bool(stderr and len(stderr.strip()) > 0)
+        }
