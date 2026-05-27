@@ -1748,19 +1748,8 @@ Option 2 (Generate): Generate a highly-targeted micro-wordlist (50-100 entries) 
         # Wildcard detected: adapt command conservatively
         self.log.info(f"[PREFLIGHT] Wildcard-like responses detected for {base} (st={st_base}, rand={st_rand}); adapting {lower} command.")
 
-        # V6 PATH FIX: get_wordlist() checks path.exists() on the LOCAL (Windows) machine.
-        # When running VPS-remote, always use get_vps_wordlist() which resolves Linux paths.
-        if USE_REMOTE_VPS:
-            ssh_exec = getattr(self.tools, 'remote', None)
-            micro_path = (
-                config_paths.get_vps_wordlist("directory", ssh_executor=ssh_exec) or
-                config_paths.get_vps_wordlist("common", ssh_executor=ssh_exec)
-            )
-        else:
-            micro_path = config_paths.get_wordlist("directory") or config_paths.get_wordlist("common")
-        if micro_path is None:
-            micro_path = self._provision_target_wordlist()
-        micro = str(micro_path) if micro_path else None
+        # AI engine now explicitly injects `{WORDLIST}` templates which get translated to actual paths
+        # in the agent loop. There is no need for `_harden_shell_cmd` to force wordlist overrides anymore.
 
         if lower == "gobuster":
             # If it's a directory scan, add a calibrated exclude-length.
