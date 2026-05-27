@@ -2310,12 +2310,12 @@ Option 2 (Generate): Generate a highly-targeted micro-wordlist (50-100 entries) 
             flags = p.get("flags", "-sV -sC")
             return f"nmap {flags} -p {ports} {shlex.quote(clean_host)}"
         if t == "gobuster":
-            wordlist = p.get("wordlist") or _wl("directory")
-            return f"gobuster dir -u {shlex.quote(clean_url)} -w {shlex.quote(wordlist)} -t 20 -q"
+            wordlist = p.get("wordlist") or "{WORDLIST}"
+            return f"gobuster dir -u {shlex.quote(clean_url)} -w {wordlist} -t 20 -q"
         if t == "ffuf":
-            wordlist = p.get("wordlist") or _wl("directory")
+            wordlist = p.get("wordlist") or "{WORDLIST}"
             fuzz_url = clean_url.rstrip("/") + "/FUZZ"
-            return f"ffuf -u {shlex.quote(fuzz_url)} -w {shlex.quote(wordlist)} -mc 200,301,302,403 -ac -t 20"
+            return f"ffuf -u {shlex.quote(fuzz_url)} -w {wordlist} -mc 200,301,302,403 -ac -t 20"
         if t == "nuclei":
             sev = p.get("severity", "medium,high,critical")
             templates = p.get("templates") or self._nuclei_templates_path()
