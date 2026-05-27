@@ -1885,16 +1885,13 @@ Option 2 (Generate): Generate a highly-targeted micro-wordlist (50-100 entries) 
                 if "-t " not in cmd: cmd += " -t 5"
                 self.log.info(f"[ESCALATION T1] gobuster: Reduced threads to 5")
             elif tier == 2:
-                # Tier 2: Reduce wordlist size with smaller list
-                wl_path = config_paths.get_vps_wordlist("common", ssh_executor=self.tools.remote) if hasattr(self, 'tools') else None
-                if wl_path:
-                    cmd = re.sub(r'-w\s+\S+', f'-w {wl_path}', cmd)
-                self.log.info(f"[ESCALATION T2] gobuster: Using smaller wordlist")
+                # Tier 2: Add delay
+                if "--delay" not in cmd: cmd += " --delay 500ms"
+                self.log.info(f"[ESCALATION T2] gobuster: Added 500ms delay")
             elif tier >= 3:
-                # Tier 3: Micro-wordlist only
-                micro_wl = self._generate_micro_wordlist("generic") or f"{config_paths.VPS_TEMP_DIR}/micro.txt"
-                cmd = re.sub(r'-w\s+\S+', f'-w {micro_wl}', cmd)
-                self.log.info(f"[ESCALATION T3] gobuster: Using micro-wordlist only")
+                # Tier 3: Add WAF evasion headers instead of overriding AI wordlist
+                if "-H" not in cmd: cmd += ' -H "X-Forwarded-For: 127.0.0.1"'
+                self.log.info(f"[ESCALATION T3] gobuster: Applied strict WAF headers")
 
         elif effective_tool == "ffuf":
             if tier == 1:
@@ -1908,10 +1905,9 @@ Option 2 (Generate): Generate a highly-targeted micro-wordlist (50-100 entries) 
                 if "-t " not in cmd: cmd += " -t 5"
                 self.log.info(f"[ESCALATION T2] ffuf: Reduced threads to 5")
             elif tier >= 3:
-                # Tier 3: Micro-wordlist
-                micro_wl = self._generate_micro_wordlist("generic") or f"{config_paths.VPS_TEMP_DIR}/micro.txt"
-                cmd = re.sub(r'-w\s+\S+', f'-w {micro_wl}', cmd)
-                self.log.info(f"[ESCALATION T3] ffuf: Using micro-wordlist only")
+                # Tier 3: Add WAF evasion headers instead of overriding AI wordlist
+                if "-H" not in cmd: cmd += ' -H "X-Forwarded-For: 127.0.0.1"'
+                self.log.info(f"[ESCALATION T3] ffuf: Applied strict WAF headers")
 
         elif effective_tool == "nikto":
             if tier == 1:
