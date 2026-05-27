@@ -1,24 +1,52 @@
 import json
 import re
+import shlex
+import time
+import hashlib
 from agents.base_agent import BaseAgent
 from utils.display import section, info, warning, success
-from utils.validator import is_valid_target
-from config import USE_REMOTE_VPS, HONEYPOT_PORT_THRESHOLD
-import os
-
+from config import USE_REMOTE_VPS
+from core.target_context import TargetContext
+from intelligence.waf_fingerprinter import WafFingerprinter
+from core.robust_parser import extract_json, extract_json_list
+from core.result_contracts import FragileParseFixer
+import config_paths
 
 class ReconAgent(BaseAgent):
+    def _preflight(self) -> tuple[bool, str]:
+        """Verify core tools are available. Only hard-block if BOTH nmap and curl are missing."""
+        self.log.info("Performing pre-flight dependency checks...")
+        # Hard-required: nmap (port scan) + curl (HTTP probes). Everything else is optional.
+        HARD_REQUIRED = ["nmap", "curl"]
+        # Optional: warn but don't block
+        try:
+            rules = self._load_rules("recon")
+            optional_tools = rules.get("core_tools", ["masscan", "dig", "subfinder"])
+            optional_tools = [t for t in optional_tools if t not in HARD_REQUIRED]
+        except Exception:
+            optional_tools = ["masscan", "dig", "subfinder"]
+
+        missing_hard = [t for t in HARD_REQUIRED if not self.tools.ensure_installed(t)]
+        if missing_hard:
+            return False, f"Missing critical recon tools (hard block): {', '.join(missing_hard)}"
+
+        missing_opt = [t for t in optional_tools if not self.tools.ensure_installed(t)]
+        if missing_opt:
+            self.log.warning(f"Optional recon tools missing (degraded mode): {', '.join(missing_opt)}")
+
+        return True, ""
+
 
     def _verify_subdomain(self, subdomain: str, wildcard_ips: set,
                            is_cdn: bool = False, silent: bool = False) -> tuple[bool, str | None]:
         """
         Post-enumeration filter to eliminate wildcard DNS / CDN noise.
-        Uses the parent TARGET for scope enforcement, not the subdomain itself.
         """
-        # Scope check uses parent domain so sub.target.com passes correctly
-        # Use silent=True on the tool calls if requested to avoid flooding terminal
+        infra = self._get_infra_rules()
+        dns_resolver = infra.get("global_dns_resolver", "1.1.1.1")
+        
         r_dig = self.safe_run_tool(
-            "dig", f"dig @1.1.1.1 +short {subdomain}", self.session.target,
+            "dig", f"dig @{dns_resolver} +short {subdomain}", self.session.target,
             silent=silent
         )
         out = r_dig.stdout
@@ -30,15 +58,12 @@ class ReconAgent(BaseAgent):
         if not resolved_ips:
             return False, None
 
-        # If it resolves to the same IPs as the wildcard canary → it's fake
         if wildcard_ips and (resolved_ips == wildcard_ips or
                               resolved_ips.issubset(wildcard_ips)):
             return False, None
 
-        # Clean subdomain string just in case it contains scheme or leading dots
         clean_sub = re.sub(r'^https?://', '', subdomain).strip('/').lstrip('.')
         
-        # HTTP verification — check for CDN-specific error pages
         r = self.safe_run_tool(
             "curl",
             f"curl -sI --max-time 5 http://{clean_sub}",
@@ -47,7 +72,6 @@ class ReconAgent(BaseAgent):
         )
         combined = (r.stdout + r.stderr).upper()
         
-        # Vercel / Cloudflare CDN 404-equivalents
         if any(x in combined for x in ["DEPLOYMENT_NOT_FOUND", "DEPLOYMENT_NOT_READY",
                                          "ERR_NGROK_3200", "NO_RESPONSE", "DIRECT_ACCESS_FORBIDDEN"]):
             return False, None
@@ -57,485 +81,522 @@ class ReconAgent(BaseAgent):
 
         return True, list(resolved_ips)[0]
 
-    def run(self) -> dict:
-        section("PHASE 2 — Reconnaissance")
+    def _emit_ai_recon_findings(self, tool_name: str, target: str, parsed: dict) -> int:
+        if not isinstance(parsed, dict):
+            return 0
+
+        added = 0
+        tool = (tool_name or "").lower()
+
+        if tool in {"nmap", "masscan"}:
+            services = parsed.get("services", {}) if tool == "nmap" else {}
+            if services:
+                for port, svc in list(services.items())[:30]:
+                    proto = svc.get("protocol", "tcp")
+                    service = svc.get("service", "?")
+                    version = svc.get("version", "")
+                    detail = f"Port {port}/{proto}: {service} {version}".strip()
+                    sev = "medium"
+                    try:
+                        sev = "info" if int(port) in (80, 443) else "medium"
+                    except Exception:
+                        pass
+                    self.add_finding("open_port", target, detail, sev)
+                    added += 1
+            else:
+                for port in parsed.get("open_ports", [])[:30]:
+                    sev = "medium"
+                    try:
+                        sev = "info" if int(port) in (80, 443) else "medium"
+                    except Exception:
+                        pass
+                    self.add_finding("open_port", target, f"Port {port}/tcp discovered", sev)
+                    added += 1
+
+        elif tool == "sslscan":
+            findings = parsed.get("findings", []) if isinstance(parsed.get("findings"), list) else []
+            for finding in findings[:20]:
+                lower = finding.lower()
+                sev = "high" if any(k in lower for k in ("weak protocol", "expired", "self-signed", "not trusted")) else "medium"
+                self.add_finding("ssl_observation", target, finding, sev)
+                added += 1
+
+            protocols = parsed.get("protocols", {}) if isinstance(parsed.get("protocols"), dict) else {}
+            if protocols and not findings:
+                enabled = [k for k, v in protocols.items() if str(v).lower() == "enabled"]
+                if enabled:
+                    self.add_finding("ssl_observation", target, f"Enabled protocols: {', '.join(enabled)}", "info")
+                    added += 1
+
+        elif tool == "whatweb":
+            tech = parsed.get("technologies", {}) if isinstance(parsed.get("technologies"), dict) else {}
+            for key, value in list(tech.items())[:15]:
+                self.add_finding("tech_stack", target, f"{key}: {value}", "info")
+                added += 1
+            for finding in parsed.get("findings", [])[:10]:
+                self.add_finding("web_fingerprint", target, finding, "info")
+                added += 1
+
+        elif tool in {"gobuster", "ffuf", "feroxbuster"}:
+            for finding in parsed.get("findings", [])[:30]:
+                self.add_finding("discovered_endpoint", target, finding, "info")
+                added += 1
+                # If a directory is found, consider it a potential app root (base path)
+                if finding.endswith("/") or "Status: 301" in finding or "Dir" in finding:
+                    path = finding.split()[0].split("?")[0]
+                    if not path.startswith("/"):
+                        path = "/" + path
+                    if not path.endswith("/"):
+                        path += "/"
+                    self.add_finding("app_root", target, path, "info")
+
+        elif tool == "nikto":
+            try:
+                rules = self._load_rules("recon")
+                NIKTO_NOISE = rules.get("nikto_noise", [
+                    "no cgi directories found", "items checked", "host(s) tested",
+                    "target hostname", "target ip", "target port", "target host",
+                    "start time", "end time", "nikto v", "server:", "host maximum execution time",
+                    "no web server found", "0 host(s)", "1 host(s)", "error:",
+                    "root page", "redirects to",
+                ])
+            except Exception:
+                NIKTO_NOISE = [
+                    "no cgi directories found", "items checked", "host(s) tested",
+                    "target hostname", "target ip", "target port", "target host",
+                    "start time", "end time", "nikto v", "server:", "host maximum execution time",
+                    "no web server found", "0 host(s)", "1 host(s)", "error:",
+                    "root page", "redirects to",
+                ]
+
+            for finding in parsed.get("findings", [])[:20]:
+                lower = finding.lower()
+                if any(noise in lower for noise in NIKTO_NOISE):
+                    continue
+                self.add_finding("web_vulnerability_hint", target, finding, "medium")
+                added += 1
+
+        elif tool == "nuclei":
+            for vuln in parsed.get("findings", [])[:30]:
+                template_id = vuln.get("template_id") or "unknown-template"
+                name = vuln.get("name") or "Unnamed finding"
+                sev = str(vuln.get("severity", "info")).lower()
+                self.add_finding("vulnerability_hint", target, f"{template_id}: {name}", sev)
+                added += 1
+
+        elif tool == "wafw00f":
+            if parsed.get("is_behind_waf"):
+                waf_name = parsed.get("waf_name") or "WAF"
+                self.add_finding("waf_detected", target, f"AI recon confirmed {waf_name}", "medium")
+                added += 1
+
+        # â”€â”€ GENERIC SENSITIVE DATA EXTRACTOR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        # Universal regex fallback to catch critical items in raw tool outputs
+        # that specific parsers might miss.
+        raw_out = str(parsed.get("raw", "")) or str(parsed)
+        SENSITIVE_REGEX = {
+            "private_key": r"-----BEGIN [A-Z ]+ PRIVATE KEY-----",
+            "cloud_secret": r"(?:AKIA|ASIA)[0-9A-Z]{16}",
+            "shadow_entry": r"^[a-z_][a-z0-9_-]*:\$1\$\w+\$.*",
+        }
+        for name, regex in SENSITIVE_REGEX.items():
+            matches = re.findall(regex, raw_out, re.IGNORECASE | re.MULTILINE)
+            for m in list(set(matches))[:5]:
+                match_str = m if isinstance(m, str) else str(m)
+                self.add_finding("encrypted_data" if name == "hash" else name, target, f"Sensitive {name} found: {match_str[:50]}...", "critical")
+                added += 1
+
+        return added
+
+    async def run(self) -> dict:
+        section("PHASE 2 â€” Reconnaissance")
         self.store.set_phase_status(self.session.engagement_id, "recon", "running")
 
-        target = self.session.target
+        # ── TARGET NORMALIZATION (Robust V6) ─────────────────────────────────
+        # V6 FIX: NEVER use scope._normalize_target() here - it strips the scheme
+        # returning a bare host. Downstream safe_run_tool then re-prefixes with http://,
+        # causing str.replace("novalink.lk", "http://novalink.lk") to corrupt any
+        # command already containing https://novalink.lk/ -> "https://http://novalink.lk/".
+        raw_target = self.session.target
+        try:
+            _tc = TargetContext.from_input(raw_target)
+            target = _tc.base_url   # e.g. "https://novalink.lk" (canonical, scheme preserved)
+            host   = _tc.host       # e.g. "novalink.lk"        (bare hostname for DNS/nmap)
+        except Exception:
+            target = TargetContext.normalize_url(raw_target)
+            host   = re.sub(r"^https?://", "", target).split("/")[0].split(":")[0]
         results = {}
 
-        # 1. WHOIS (with RDAP fallback for ccTLDs like .lk that block standard WHOIS)
-        info("Running WHOIS...")
-        r = self.safe_run_tool("whois", f"whois {target}", target)
-        results["whois"] = r.parsed
-        whois_text = json.dumps(r.parsed)[:500]
-        if r.success and r.parsed and whois_text != "{}":
-            self.add_finding("whois", target, whois_text, "info")
-        else:
-            # RDAP fallback — works for .lk and other restricted ccTLDs
-            info(f"WHOIS returned empty for {target}. Trying RDAP fallback...")
-            rdap_domain = target.replace(".", "/", 1) if target.count(".") == 1 else target
-            r_rdap = self.safe_run_tool(
-                "curl",
-                f"curl -sL --max-time 15 'https://rdap.org/domain/{target}'",
-                target, silent=True
-            )
-            if r_rdap.success and r_rdap.stdout.strip().startswith("{"):
-                try:
-                    rdap = json.loads(r_rdap.stdout)
-                    registrar = rdap.get("entities", [{}])
-                    rdap_info = f"RDAP: registrar={rdap.get('handle', 'unknown')} status={rdap.get('status', [])}"
-                    results["whois"] = {"rdap": rdap_info}
-                    self.add_finding("whois", target, rdap_info[:300], "info")
-                    info(f"RDAP result: {rdap_info[:120]}")
-                except Exception:
-                    pass
-            else:
-                warning(f"WHOIS + RDAP both returned empty for {target} — registry may block lookups.")
-
-        # 2. DNS enumeration
-        info("Running DNS enumeration...")
-        dns_results = {}
-        for record in ["A", "MX", "NS", "TXT", "CNAME"]:
-            # Always use @1.1.1.1 — VPS default resolver may be slow or filtered
-            r = self.safe_run_tool("dig", f"dig @1.1.1.1 {record} {target} +short", target)
-            if r.success and r.stdout.strip():
-                dns_results[f"dns_{record}"] = r.stdout.strip().splitlines()
-                self.add_finding("dns_record", target,
-                                  f"{record}: {r.stdout.strip()[:200]}", "info")
-        results.update(dns_results)
-
-        # Early CDN detection from NS records
-        ns_records = dns_results.get("dns_NS", [])
-        ns_str = str(ns_records).lower()
-        is_cdn_early = any(
-            x in ns_str
-            for x in ["vercel", "cloudflare", "fastly", "akamai", "dns-parking", "hostinger"]
-        )
-        if is_cdn_early:
-            info(f"Early CDN detection via NS: {target} uses Hostinger/CDN nameservers.")
-            # dns-parking.com = Hostinger's DNS — flag as infrastructure intelligence
-            if "dns-parking" in ns_str or "hostinger" in ns_str:
-                self.add_finding("infra_intel", target,
-                                  f"NS records point to Hostinger DNS parking: {ns_records}", "info")
-
-        # Bug 1 Fix: Wildcard Canary Fingerprinting
-        # Resolve a guaranteed-fake subdomain to get the wildcard IP set
-        canary = f"xzq99canary99xzq.{target}"
-        info(f"Fingerprinting wildcard DNS with canary: {canary}")
-        r_canary = self.safe_run_tool("dig", f"dig @1.1.1.1 +short {canary}", target)
-        wildcard_ips = set(re.findall(r'\d+\.\d+\.\d+\.\d+', r_canary.stdout))
-        if wildcard_ips:
-            info(f"Wildcard fingerprint: {wildcard_ips} — will filter subdomain results")
-
-
-        # ── Passive Recon (theHarvester) ─────────────────────────────────────
-        info(f"Running passive discovery on {target} (theHarvester)...")
-        passive_subs = set()
-        # Use only sources reliably confirmed to work without API keys in theHarvester v4.10.1.
-        # Removed: baidu, dnsdumpster, threatcrowd, urlscan, yahoo, crtsh (all fail silently
-        # or require API keys, wasting 20+ seconds with zero results).
-        # crt.sh is queried directly below via curl for better reliability.
-        sources = "duckduckgo,hackertarget,otx,rapiddns"
-        r_harv = self.safe_run_tool(
-            "theharvester",
-            f"theHarvester -d {target} -b {sources} -f /tmp/harvester_{target}.json",
-            target
-        )
-        if r_harv.success:
-            p_subs = re.findall(rf'([a-zA-Z0-9.-]+\.{re.escape(target)})', r_harv.stdout)
-            passive_subs.update(s.lower() for s in p_subs if s.lower() != target)
-
-        # Read back the JSON output file from VPS (theHarvester writes results to file, not stdout)
-        if USE_REMOTE_VPS and self.tools.remote:
-            harv_json_path = f"/tmp/harvester_{target}.json"
-            exit_c, harv_json, _ = self.tools.remote.execute(f"cat {harv_json_path} 2>/dev/null")
-            if exit_c == 0 and harv_json.strip():
-                try:
-                    import json as _hjson
-                    hdata = _hjson.loads(harv_json)
-                    # theHarvester JSON structure: {"hosts": [...], "ips": [...], "emails": [...]}
-                    for host in hdata.get("hosts", []):
-                        h = str(host).split(":")[0].lower().strip()
-                        if h.endswith(target) and h != target:
-                            passive_subs.add(h)
-                    for email in hdata.get("emails", []):
-                        self.add_finding("email", target, str(email), "medium")
-                except Exception as _e:
-                    # Fallback: parse as plain text for hostnames
-                    for line in harv_json.splitlines():
-                        line = line.strip()
-                        if line.endswith(target) and line != target:
-                            passive_subs.add(line.lower())
-
-        if passive_subs:
-            info(f"Passive discovery found {len(passive_subs)} potential subdomains.")
-
-        # ── Elite Recon: Certificate Transparency (crt.sh) ───────────────────
-        info(f"Querying Certificate Transparency logs for {target}...")
-        r_crt = self.safe_run_tool(
-            "curl",
-            f"curl -sL --max-time 30 \"https://crt.sh/?q=%.{target}&output=json\"",
-            target,
-            silent=True
-        )
-        if r_crt.success and r_crt.stdout.strip().startswith("["):
-            try:
-                crt_data = json.loads(r_crt.stdout)
-                for entry in crt_data:
-                    name_value = entry.get("name_value", "").lower()
-                    for sub in name_value.split('\n'):
-                        if sub.endswith(target) and sub != target and "*" not in sub:
-                            passive_subs.add(sub.strip())
-            except Exception:
-                pass
-        info(f"CT Logs merged. Total passive subdomains: {len(passive_subs)}")
-
-        # ── Elite Recon: Wayback Machine Historical Endpoints ────────────────
-        info(f"Scraping historical API endpoints from Internet Archive...")
-        r_wayback = self.safe_run_tool(
-            "curl",
-            f"curl -sL --max-time 30 \"http://web.archive.org/cdx/search/cdx?url=*.{target}/*&output=txt&fl=original&collapse=urlkey\"",
-            target,
-            silent=True
-        )
-        archived_urls = []
-        if r_wayback.success:
-            for line in r_wayback.stdout.splitlines():
-                if "api" in line.lower() or "?" in line:
-                    archived_urls.append(line.strip())
-            if archived_urls:
-                info(f"Found {len(archived_urls)} historical endpoints/parameters via Wayback.")
-                results["archived_endpoints"] = archived_urls[:50]  # Store top 50
-                self.add_finding("historical_endpoints", target, f"Wayback found {len(archived_urls)} past endpoints.", "low")
-
-        # ── Elite Recon: Cloud Asset Enumeration (Heuristics) ────────────────
-        cloud_prefixes = ["api-", "dev-", "staging-", "test-", "s3-", "assets-"]
-        for pref in cloud_prefixes:
-            passive_subs.add(f"{pref}{target}")
-        info(f"Added {len(cloud_prefixes)} heuristic cloud prefixes for verification.")
-
-        # ── Active Enumeration (gobuster) ────────────────────────────────────
-        sub_list = "/tmp/subdomains.txt" if USE_REMOTE_VPS else str(self.session.results_dir / "raw" / "subdomains.txt")
-        sub_url = "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/subdomains-top1million-5000.txt"
-        
-        r_sub = type("R", (), {"success": False, "stdout": "", "parsed": {}})()
-        
-        if USE_REMOTE_VPS:
-            if self.tools.remote:
-                # Check if file exists and has enough lines on VPS
-                exit_code, out, _ = self.tools.remote.execute(f"[ -s {sub_list} ] && wc -l < {sub_list}")
-                if exit_code != 0 or not out.strip().isdigit() or int(out.strip()) < 100:
-                    self.log.info("Downloading DNS wordlist to VPS...")
-                    self.tools.remote.execute(f"curl -sL --max-time 60 {sub_url} -o {sub_list}")
-
-                # Verify wordlist AFTER download (curl may have timed out leaving 0-byte file)
-                exit_code2, out2, _ = self.tools.remote.execute(f"wc -l < {sub_list} 2>/dev/null || echo 0")
-                wordlist_lines = int(out2.strip()) if out2.strip().isdigit() else 0
-                if wordlist_lines < 100:
-                    warning(f"Wordlist download failed or too small ({wordlist_lines} lines). Using built-in fallback.")
-                    # Write a minimal hardcoded fallback wordlist to VPS
-                    fallback_subs = "www\nmail\nftp\nadmin\napi\ndev\nstaging\ntest\nshop\nblog\napp\nm\ncdn\nstatic\nassets\nvpn\nremote\nwebmail\nportal\nauth\nlogin\naccounts\ndash\ndashboard\npanel"
-                    self.tools.remote.execute(f"printf '{fallback_subs}' > {sub_list}")
-
-                # Use --resolver 1.1.1.1 to bypass OS resolver overload with high thread counts
-                # Reduce threads from 40→20 to avoid SERVFAIL storm on single resolver
-                r_sub = self.safe_run_tool(
-                    "gobuster",
-                    f"gobuster dns -d {target} -w {sub_list} -t 20 --timeout 15s --wildcard --resolver 1.1.1.1",
-                    target
-                )
-        else:
-            if not os.path.exists(sub_list):
-                 try:
-                    import requests as req
-                    resp = req.get(sub_url, timeout=20)
-                    if resp.status_code == 200:
-                        open(sub_list, "w", encoding="utf-8").write(resp.text)
-                 except: pass
-            r_sub = self.safe_run_tool(
-                "gobuster",
-                f"gobuster dns -d {target} -w {sub_list} -t 20 --timeout 15s --wildcard",
-                target
-            )
-
-        active_lines = r_sub.stdout.strip().splitlines() if r_sub.success else []
-        found_subs = set()
-        for line in active_lines:
-             if "Found:" in line:
-                 s = line.replace("Found:", "").strip().lower()
-                 if s.endswith(target): found_subs.add(s)
-
-        # Merge passive and active results
-        all_potential = found_subs.union(passive_subs)
-        total_found = len(all_potential)
-        info(f"Filtering {total_found} potential subdomains for wildcard/CDN noise...")
-        
-        valid_count = 0
-        processed = 0
-        for sub in sorted(list(all_potential)):
-            if valid_count >= 100: # Cap at 100 real subdomains for broad coverage
-                info("Reached cap of 100 valid subdomains. Stopping deeper verification.")
-                break
-
-            processed += 1
-            if processed % 25 == 0:
-                info(f"Verification progress: {processed}/{total_found} processed...")
-            
-            # FAST DROP: If it resolves only to wildcard IPs, it's garbage
-            is_valid, ip = self._verify_subdomain(sub, wildcard_ips, silent=True)
-            if is_valid:
-                valid_count += 1
-                self.add_finding("subdomain", sub, f"IP: {ip}", "medium")
-                self.session.scope.append(sub)  # Add to session for next phases
-
-        # 3. Port Discovery (using unique IPs found above)
-        unique_ips = set()
-        for finding in self._findings:
-            if finding["type"] == "subdomain":
-                ip_match = re.search(r'IP: ([\d.]+)', finding["detail"])
-                if ip_match: unique_ips.add(ip_match.group(1))
-
-        # 4. Fast port discovery with masscan
-        info("Resolving root target IPs for masscan...")
-        resolve_result = self.safe_run_tool("dig", f"dig @1.1.1.1 A {target} +short", target)
-        root_ips = []
-        if resolve_result.success and resolve_result.stdout.strip():
-            for line in resolve_result.stdout.strip().splitlines():
-                if re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$', line.strip()):
-                    root_ips.append(line.strip())
-        
-        # Combine root IPs with discovered unique IPs
-        for ip in root_ips:
-            unique_ips.add(ip)
-            
-        root_ip = root_ips[0] if root_ips else None
-        
-        # Select targets for masscan (cap at 10 for performance)
-        masscan_targets = list(unique_ips)[:10]
-        if masscan_targets:
-            info(f"Sweeping discovered infrastructure IPs: {masscan_targets}")
-            targets_str = " ".join(masscan_targets)
-        else:
-            targets_str = target
-
-        info(f"Running masscan against {targets_str}...")
-        r = self.safe_run_tool(
-            "masscan",
-            f"masscan {targets_str} -p 1-65535 --rate=200 --wait 5 "
-            f"--exclude 255.255.255.255",
-            target
-        )
-        fast_ports = r.parsed.get("open_ports", [])
-        results["masscan_ports"] = fast_ports
-
-        # 5. Detailed nmap on discovered ports
-        local_nmap_out = self.session.results_dir / "raw" / "nmap_output.txt"
-        vps_nmap_out = self.tools.vps_path(local_nmap_out)
-
-        if fast_ports:
-            port_str = ",".join(map(str, sorted(fast_ports[:50])))
-            # Scan the SAME IPs masscan used — not the hostname.
-            # hcdn rotates DNS between scans; re-resolving gives a DIFFERENT CDN server.
-            # If masscan found ports on specific IPs, nmap those IPs directly.
-            if masscan_targets and masscan_targets[0] != target:
-                # Use first resolved IP and add --resolve-all suppressed by using IP directly
-                nmap_ip_targets = " ".join(masscan_targets[:3])  # cap at 3 IPs
-                nmap_cmd = (f'nmap -sV -sC -O -p {port_str} {nmap_ip_targets} '
-                            f'--script-args newtargets '
-                            f'-oN "{vps_nmap_out}"')
-            else:
-                nmap_cmd = f'nmap -sV -sC -O -p {port_str} {target} -oN "{vps_nmap_out}"'
-        else:
-            info("Masscan found no ports. Running nmap top-1000 scan.")
-            nmap_cmd = f'nmap -sV -sC -O --top-ports 1000 {target} -oN "{vps_nmap_out}"'
-
-        info("Running nmap service detection...")
-        r = self.safe_run_tool("nmap", nmap_cmd, target, output_path=local_nmap_out)
-        results["nmap"] = r.parsed
-
-        if r.parsed.get("open_ports"):
-            for port, svc in r.parsed.get("services", {}).items():
-                self.add_finding(
-                    "open_port", target,
-                    f"Port {port}/{svc.get('protocol', 'tcp')}: "
-                    f"{svc.get('service', '?')} {svc.get('version', '')}",
-                    "medium" if int(port) not in [80, 443] else "info"
-                )
-
-        # ── Honeypot Detection Heuristics ─────────────────────────────────
-        all_open_ports = r.parsed.get("open_ports", []) or fast_ports
-        if len(all_open_ports) > HONEYPOT_PORT_THRESHOLD:
-            warning(
-                f"HONEYPOT INDICATOR: {len(all_open_ports)} ports open on {target} "
-                f"(threshold: {HONEYPOT_PORT_THRESHOLD}). This is abnormally high."
-            )
-            self.add_finding(
-                "honeypot_indicator", target,
-                f"{len(all_open_ports)} ports open — possible honeypot or misconfigured host. "
-                f"Results may be unreliable. Manual verification recommended.",
-                "high"
-            )
-
-        # ── GeoIP Block Detection ─────────────────────────────────────────
-        # If DNS resolves but ALL ports are unreachable, suspect GeoIP blocking
-        if root_ip and not all_open_ports:
-            warning(
-                f"Target {target} resolves to {root_ip} but no ports are reachable. "
-                f"Possible GeoIP blocking from VPS region."
-            )
-            self.add_finding(
-                "geo_block_suspected", target,
-                f"DNS resolves to {root_ip} but all connections fail — "
-                f"may require local proxy or VPS in target's region",
-                "high"
-            )
-
-        # 6. SMB enumeration if port 445 open
-        if 445 in r.parsed.get("open_ports", []):
-            info("SMB port open. Running enum4linux...")
-            r2 = self.safe_run_tool("enum4linux", f"enum4linux -a {target}", target)
-            results["smb"] = r2.parsed
-            if r2.parsed.get("users"):
-                self.add_finding("smb_users", target,
-                                  f"SMB users: {', '.join(r2.parsed['users'])}", "high")
-
-        # 7. WAF Detection
-        info("Checking for WAF/Firewall...")
-        r_waf = self.safe_run_tool("wafw00f", f"wafw00f {target}", target)
-        waf_info = "None detected"
-        out_lower = r_waf.stdout.lower()
-        is_behind = False
-
-        if r_waf.success:
-            is_behind = (
-                "is behind" in r_waf.stdout or
-                "x-vercel-mitigated" in out_lower or
-                "vercel security checkpoint" in out_lower or
-                "cloudflare" in out_lower
-            )
-            if is_behind:
-                waf_parsed = r_waf.parsed
-                waf_info = waf_parsed.get("waf_name") or "CDN/WAF"
-                if "vercel" in out_lower:
-                    waf_info = "Vercel"
-                elif "cloudflare" in out_lower:
-                    waf_info = "Cloudflare"
-                info(f"WAF Detected: {waf_info}")
-                self.add_finding("waf_detected", target,
-                                  f"Target is behind {waf_info}", "medium")
-
-        # ── hcdn / Hostinger CDN fingerprinting (wafw00f has no signature for it) ──
-        # hcdn injects 'x-hcdn-request-id' and 'x-hcdn-cache-status' response headers.
-        # wafw00f returns false negative — we do a direct header probe to catch it.
-        if not is_behind:
-            info("wafw00f found no WAF. Running hcdn/Hostinger CDN header probe...")
-            r_hcdn = self.safe_run_tool(
-                "curl",
-                f"curl -sI --max-time 10 https://{target}",
-                target, silent=True
-            )
-            hcdn_lower = r_hcdn.stdout.lower()
-            if any(h in hcdn_lower for h in [
-                "x-hcdn-request-id", "x-hcdn-cache-status",
-                "x-hostinger", "hostinger"
-            ]):
-                is_behind = True
-                waf_info = "hcdn (Hostinger CDN)"
-                info(f"hcdn CDN detected via response headers!")
-                self.add_finding("waf_detected", target,
-                                  f"Target is behind hcdn (Hostinger CDN) — wafw00f blind spot", "medium")
-
-        is_cdn = any(
-            x in r_waf.stdout.lower()
-            for x in ["vercel", "cloudflare", "fastly", "akamai", "varnish", "hcdn", "hostinger"]
-        ) or is_cdn_early or is_behind
-
-        # AI recon analysis
-        info("Asking AI to analyze recon findings and generate dynamic commands...")
-        summary_prompt = (
-            f"You are the GHOSTWIRE V5 Autonomous Pentest Engine. Analyze these recon results for {target}:\n"
-            f"{json.dumps(results, default=str)[:3000]}\n\n"
-            f"Provide a highly technical, offensive-security focused attack plan. Identify specific CVE potential, misconfigurations, and deeper enumeration steps.\n"
-            f"Respond exactly in the following JSON format:\n"
-            f"{{\n"
-            f"  \"analysis\": \"Your detailed textual analysis and attack plan\",\n"
-            f"  \"commands\": [\"sslscan {target}\", \"nmap -p 3306 --script=mysql-enum {target}\"]\n"
-            f"}}\n"
-            f"CRITICAL COMMAND SYNTAX RULES:\n"
-            f"- nmap scripts use EQUALS sign: --script=SCRIPT_NAME (NOT --script:SCRIPT_NAME)\n"
-            f"- All commands must be valid Linux bash, executable directly on a Debian VPS\n"
-            f"- Only use tools that exist in standard repos: nmap, sslscan, whatweb, nikto, dig, curl, wget, enum4linux, sqlmap, gobuster, ffuf\n"
-            f"- Do NOT use pipes or semicolons, keep each command simple and standalone\n"
-            f"- Target must always be the last argument\n"
-            f"Ensure the 'commands' array contains up to 3 specific bash commands for further deep reconnaissance. Return ONLY valid JSON."
-        )
-        ai_response = self.think(summary_prompt)
         try:
-            cleaned_response = ai_response.strip()
-            if cleaned_response.startswith("```json"):
-                cleaned_response = cleaned_response[7:-3]
-            elif cleaned_response.startswith("```"):
-                cleaned_response = cleaned_response[3:-3]
-                
-            parsed_ai = json.loads(cleaned_response)
-            ai_analysis = parsed_ai.get("analysis", "No textual analysis provided.")
-            ai_commands = parsed_ai.get("commands", [])
-            
-            results["ai_analysis"] = ai_analysis
-            info(f"AI Recon Analysis:\n{ai_analysis}")
-            
-            if ai_commands:
-                info(f"Executing {len(ai_commands)} AI-generated dynamic recon commands...")
-                for cmd in ai_commands[:3]:
-                    # Pre-execution sanitizer: fix common AI hallucinations
-                    cmd = re.sub(r'--script:', '--script=', cmd)  # nmap colon→equals
-                    cmd = re.sub(r'\s+', ' ', cmd).strip()  # collapse whitespace
-                    if cmd.startswith("nikto") and "-maxtime" not in cmd:
-                        cmd += " -maxtime 60"
-                    if not cmd or len(cmd) > 300:
-                        continue
-                    info(f"Running dynamic command: {cmd}")
-                    r_cmd = self.safe_run_tool("ai_dynamic_recon", cmd, target)
-                    results[f"dynamic_cmd_{cmd[:10]}"] = r_cmd.stdout[:500]
-                    if r_cmd.success and r_cmd.stdout.strip():
-                        # ai_dynamic_recon = informational recon output, not a vulnerability
-                        self.add_finding("ai_dynamic_recon", target, f"Cmd: {cmd[:50]}\nOutput: {r_cmd.stdout[:300]}", "info")
-        except Exception as e:
-            warning(f"Failed to parse AI recon JSON: {e}")
-            ai_analysis = ai_response
-            results["ai_analysis"] = ai_analysis
-            info(f"AI Recon Analysis (Raw):\n{ai_analysis}")
+            rules = self._load_rules("recon")
+        except Exception:
+            rules = {}
 
-        # Persist to state store for cross-phase access
-        # Merge masscan and nmap ports for maximum breadth
-        open_ports = r.parsed.get("open_ports", [])
-        if not open_ports and results.get("masscan_ports"):
-            open_ports = results["masscan_ports"]
-            info(f"Using masscan ports for Phase Data: {open_ports}")
+        infra = self._get_infra_rules()
+        dns_resolver = infra.get("global_dns_resolver", "1.1.1.1")
+        
+        # Track executed commands to avoid loops
+        executed_commands = set()
+        max_recon_loops = rules.get("max_recon_loops", 3)
+        current_loop = 0
+
+        # ── INITIAL PROBE ──
+        # Always run these fast probes to give AI a starting point
+        info("Running initial discovery probe...")
+        
+        # 1. WAF & Baseline - target is already a full URL with scheme
+        fingerprinter = WafFingerprinter()
+        target_url = target   # already canonical e.g. "https://novalink.lk"
+        fingerprint = fingerprinter.fingerprint_target(target_url)
+        waf_signals = []
+        if isinstance(fingerprint, dict):
+            for key in (
+                "blocking_status_codes",
+                "blocking_headers",
+                "request_methods_blocked",
+                "path_patterns_blocked",
+                "payload_patterns_blocked",
+                "ip_rotation_required",
+                "user_agent_sensitive",
+            ):
+                value = fingerprint.get("behaviors", {}).get(key)
+                if value:
+                    waf_signals.append(key)
+
+        if fingerprint and (fingerprint.get("confidence", 0) > 0.3 or waf_signals):
+            results["waf_fingerprint"] = fingerprint
+            results["waf_present"] = True
+            results["waf_type"] = fingerprint.get("waf_type") or fingerprint.get("detected_patterns", ["unknown"])[0]
+            self.add_finding("waf_detected", target, f"Behavioral WAF: {results['waf_type']}", "medium")
+
+            # Persist immediately so later tool calls in the same engagement can
+            # adopt WAF-aware evasion without waiting for the phase to finish.
+            try:
+                self.store.set_phase_data(self.session.engagement_id, "recon", {
+                    "waf_present": True,
+                    "waf_type": results["waf_type"],
+                    "waf_fingerprint": fingerprint,
+                    "waf_bypass_url": None,
+                })
+                self.store.set(f"{self.session.engagement_id}:waf_fingerprint", json.dumps(fingerprint))
+            except Exception as _persist_waf_err:
+                self.log.debug(f"Immediate WAF persistence failed (non-fatal): {_persist_waf_err}")
+            
+            # ── V6: PROACTIVE WAF BYPASS ──
+            info("WAF detected. Triggering proactive Bypass Orchestrator...")
+            bypass_res = self._waf_orchestrator.execute_bypass(self.session.engagement_id, target)
+            if bypass_res and bypass_res.get("success"):
+                bypass_url = bypass_res.get("bypass_url")
+                if bypass_url:
+                    info(f"Proactive WAF Bypass SUCCESS: Origin discovered at {bypass_url}")
+                    self.add_finding("waf_bypass", target, f"Bypass found via {bypass_res.get('strategy')}. Origin: {bypass_url}", "high")
+                    results["waf_bypass_url"] = bypass_url
+                elif bypass_res.get("is_evasion_only"):
+                    info(f"Proactive WAF Evasion ACTIVE: Using {bypass_res.get('strategy')} mutation tactics.")
+                    self.add_finding("waf_evasion", target, f"Evasion tactics activated via {bypass_res.get('strategy')}", "low")
+                
+                # Persist bypass data
+                try:
+                    p_data = {
+                        "waf_present": True,
+                        "waf_type": results["waf_type"],
+                        "waf_fingerprint": fingerprint,
+                        "waf_bypass_url": bypass_url,
+                        "waf_bypass_strategy": bypass_res.get("strategy"),
+                    }
+                    if bypass_res.get("is_evasion_only"):
+                        p_data["waf_evasion_headers"] = bypass_res.get("details", {}).get("headers")
+                    
+                    self.store.set_phase_data(self.session.engagement_id, "recon", p_data)
+                except Exception as _persist_bypass_err:
+                    self.log.debug(f"Immediate bypass persistence failed (non-fatal): {_persist_bypass_err}")
+            else:
+                info("Proactive WAF Bypass failed. Evasion tactics will be used.")
+        
+        r_base = self.safe_run_tool("curl", f"curl -sL --max-time 12 {target}", target, silent=True)
+        baseline_size = len(r_base.stdout)
+        
+        # 2. DNS (use bare host - dig/nmap do not accept full URLs)
+        for record in ["A", "MX", "NS", "TXT"]:
+            self.safe_run_tool("dig", f"dig @{dns_resolver} {record} {host} +short", target)
+
+        # ── AI RECON LOOP ──
+        _tool_usage_counts = {}
+        while current_loop < max_recon_loops:
+            current_loop += 1
+            section(f"RECON LOOP {current_loop}/{max_recon_loops}")
+            
+            findings_summary = "\n".join([f"- {f.get('type')}: {f.get('detail')[:100]}" for f in self._findings[-30:]])
+            
+            recon_prompt = f"""### CONTEXT
+Target: {target}
+Bare Hostname: {host}
+Baseline Size: {baseline_size}
+WAF: {fingerprint.get('waf_type') if fingerprint else 'None detected'}
+
+### CURRENT FINDINGS
+{findings_summary}
+
+### MISSION
+You are the GHOSTWIRE V6 Recon Orchestrator. Decide the NEXT 3-5 Linux shell commands to maximize discovery.
+Avoid repeats. Prefer: nmap, masscan, subfinder, gobuster, nikto, nuclei, whatweb, sslscan, ffuf.
+DO NOT perform UDP scans (e.g. nmap -sU) as they are too slow and will timeout.
+
+### PREVIOUSLY EXECUTED COMMANDS
+{chr(10).join(executed_commands) if executed_commands else "None"}
+
+### RULES
+- Return ONLY a JSON array of objects: [{{"command": "...", "reason": "...", "timeout": <integer_seconds>}}]
+- CRITICAL - Set a realistic timeout for each tool. Quick probes (curl/dig) = 60s. Heavy scanners (nmap/gobuster/nuclei/ffuf) = 900s. Do NOT hardcode 200s for heavy scanners.
+- CRITICAL - Target format by tool type:
+  * HTTP tools (nikto, gobuster, ffuf, nuclei, whatweb, curl): use full URL -> {target}
+  * Raw-socket / SSL tools (nmap, masscan, sslscan, dig, subfinder): use bare hostname -> {host}
+  * sslscan MUST receive bare hostname ONLY, e.g. `sslscan {host}` - never `sslscan https://...`
+- CRITICAL - DO NOT repeat any previously executed commands or run the same tool blindly. If previous commands yielded nothing, change your strategy or return an empty array [].
+- If you have enough info for exploitation, return an empty array [].
+- CRITICAL - For directory/file fuzzing (gobuster, ffuf, dirb), you MUST use `{{WORDLIST}}` as a literal placeholder for the wordlist argument. NEVER hardcode `/usr/share/wordlists/...` or any other path. I will inject the correct AI-led wordlist path.
+
+### BANNED TOOLS
+{chr(10).join([f"- {tool}" for tool in _tool_usage_counts if _tool_usage_counts[tool] >= 2]) or "None"}
+CRITICAL: DO NOT prescribe any tool from the BANNED TOOLS list. You have exhausted them.
+"""
+            ai_resp = self.think(recon_prompt)
+            prescriptions = extract_json_list(ai_resp)
+            
+            if not prescriptions:
+                info("AI indicates recon is sufficient or no next steps identified.")
+                break
+                
+            for p in prescriptions:
+                if not isinstance(p, dict): continue
+                cmd = p.get("command")
+                if not cmd or cmd in executed_commands: continue
+                
+                info(f"AI Prescription: {p.get('reason', 'Strategic Discovery')}")
+                
+                # AI-Led Wordlist Injection (consistent with ExploitationAgent)
+                if ("gobuster" in cmd or "ffuf" in cmd) and ("{WORDLIST}" in cmd):
+                    wl = self._provision_target_wordlist()
+                    if wl:
+                        cmd = cmd.replace("{WORDLIST}", shlex.quote(wl))
+                    else:
+                        cmd = cmd.replace("{WORDLIST}", f"{config_paths.VPS_TEMP_DIR}/ai_wordlist.txt")
+                
+                # ── Scheme sanitizer: raw-socket tools must never receive https:// ──
+                # Even with the prompt fix the AI occasionally generates
+                # `sslscan https://host` or `nmap -sV https://host`.
+                # Strip the scheme here as a safety net before execution.
+                _RAW_TOOLS = ("sslscan", "nmap", "masscan", "dig", "subfinder", "nikto")
+                primary_tmp = self._extract_primary_tool(cmd) or ""
+                if primary_tmp in _RAW_TOOLS:
+                    import re as _re2
+                    schemeless_target = _re2.sub(r'^https?://', '', target)
+                    cmd = cmd.replace(f" {target}", f" {schemeless_target}")
+                
+                # Phase 3 Fix: Extract primary tool from command instead of using phantom "ai_recon"
+                primary = self._extract_primary_tool(cmd)
+                if not primary:
+                    self.log.debug(f"Could not extract tool from AI recon prescription: {cmd[:80]}...")
+                    continue
+                
+                r_tool = self.safe_run_tool(primary, cmd, target, timeout=p.get("timeout", 600))
+                executed_commands.add(cmd)
+                _tool_usage_counts[primary] = _tool_usage_counts.get(primary, 0) + 1
+                
+                # Parse and add findings
+                if primary:
+                    try:
+                        p_data = self.tools.parser.parse(primary, r_tool.stdout, r_tool.stderr)
+                        self._emit_ai_recon_findings(primary, target, p_data)
+                    except Exception as e:
+                        self.log.error(f"CRITICAL: Failed to emit recon findings from {primary}: {e}", exc_info=True)
+                        raise
+
+        # ── FINAL RECON SUMMARY ──
+        # Summarize everything learned for the exploitation phase
+        info("Finalizing recon findings...")
+        
+        final_summary_prompt = f"""### MISSION
+Analyze all findings from the iterative recon loop for target: {target}.
+Provide a concise tactical summary of the attack surface and identified vectors.
+
+### FINDINGS
+{chr(10).join([f"- {f.get('type')}: {f.get('detail')[:150]}" for f in self._findings])}
+
+### OUTPUT
+Return a single paragraph summarizing the tech stack, entry points, and exploitation readiness.
+"""
+        ai_summary = self.think(final_summary_prompt)
+        
+        # Cleanup: Extract core metrics for the bundle
+        open_ports = []
+        services = {}
+        base_paths = {"/"}
+        for f in self._findings:
+            if f.get("type") == "open_port":
+                p_match = re.search(r'Port (\d+)', f.get("detail", ""))
+                if p_match:
+                    p_num = int(p_match.group(1))
+                    open_ports.append(p_num)
+                    svc_match = re.search(r'Port \d+/\w+: ([\w-]+)', f.get("detail", ""))
+                    if svc_match:
+                        services[str(p_num)] = {"service": svc_match.group(1), "protocol": "tcp"}
+            elif f.get("type") == "app_root":
+                base_paths.add(f.get("detail", "/"))
+
+        is_behind = any(f.get("type") == "waf_detected" for f in self._findings)
+        waf_info = next((f.get("detail") for f in self._findings if f.get("type") == "waf_detected"), "None detected")
+        root_ip = next((re.search(r'IP: ([\d.]+)', f.get("detail", "")).group(1) 
+                       for f in self._findings if f.get("type") == "subdomain" and f.get("target") == target 
+                       and re.search(r'IP: ([\d.]+)', f.get("detail", ""))), None)
 
         bundle = {
-            "open_ports": open_ports,
-            "services": r.parsed.get("services", {}),
-            "osint": results.get("osint", {}),
-            "ai_analysis": ai_analysis,
-            "waf_present": is_behind if r_waf.success else False,
+            "open_ports": sorted(list(set(open_ports))),
+            "services": services,
+            "base_paths": sorted(list(base_paths)),
+            "ai_analysis": ai_summary,
+            "waf_present": is_behind,
             "waf_type": waf_info,
-            "is_cdn": is_cdn,
-            "subdomains": results.get("subdomains", []),
+            "waf_fingerprint": fingerprint or {},
+            "waf_bypass_url": results.get("waf_bypass_url"),
+            "is_cdn": is_behind,
+            "baseline_size": baseline_size,
             "resolved_ip": root_ip,
         }
-        self.store.set_phase_data(self.session.engagement_id, "recon", bundle)
 
+        # ===== AI REASONING LAYER: Structure raw findings and create tactical context =====
+        # This is the key layer that transforms messy raw output into structured tactical guidance
+        try:
+            info("Processing recon findings through AI reasoning layer...")
+            
+            # Reasoning components are now available via self (BaseAgent)
+            
+            # Collect all tool outputs for structured analysis
+            all_tool_outputs = []
+            for finding in self._findings:
+                # Each finding came from a tool; reconstruct it for analysis
+                all_tool_outputs.append({
+                    "tool": finding.get("source_tool", "unknown"),
+                    "target": target,
+                    "command": finding.get("command", ""),
+                    "stdout": finding.get("detail", "")[:3000]  # First 3K chars
+                })
+            
+            # Structure the findings through AI analysis
+            if all_tool_outputs:
+                structured_findings = self.analyzer.structure_recon_phase_output(all_tool_outputs)
+                info(f"Structured {len(structured_findings.get('all_findings', []))} findings from recon tools")
+                
+                # Register findings in awareness module
+                for finding in structured_findings.get("all_findings", []):
+                    self.awareness.register_finding(finding)
+                
+                # Get AI reasoning about what findings mean tactically
+                tactical_reasoning = self.reasoning.reason_about_findings(
+                    structured_findings,
+                    target,
+                    mode=self.session.mode if hasattr(self.session, 'mode') else "pentest"
+                )
+                
+                # Register tactical assumptions
+                for tactic in tactical_reasoning.get("exploitation_tactics", []):
+                    assumption_id = self.awareness.register_assumption(
+                        f"Try {tactic.get('tactic')} on {tactic.get('target')}",
+                        confidence=tactic.get("probability_of_success", 0.5)
+                    )
+                    info(f"[REASONING] {tactic.get('tactic')}: {tactic.get('reasoning', '')[:100]}")
+                
+                # Register knowledge gaps - guard against string entries from fallback reasoning
+                for gap in tactical_reasoning.get("knowledge_gaps", []):
+                    if isinstance(gap, dict):
+                        self.awareness.register_knowledge_gap(gap)
+                    elif isinstance(gap, str) and gap:
+                        self.awareness.register_knowledge_gap({"gap": gap, "why_it_matters": "unknown", "how_to_find_out": "manual"})
+                
+                # Add reasoning to bundle for exploitation phase
+                bundle["structured_findings"] = structured_findings
+                bundle["tactical_reasoning"] = tactical_reasoning
+                bundle["system_awareness"] = self.awareness.get_current_knowledge_state()
+                
+                success(f"AI reasoning complete. System confidence: {bundle['system_awareness'].get('overall_confidence', 'unknown')}")
+        except Exception as reasoning_err:
+            self.log.warning(f"AI reasoning layer failed (non-fatal): {reasoning_err}")
+            # Continue without reasoning layer
+
+        self.store.set_phase_data(self.session.engagement_id, "recon", bundle)
+        if fingerprint:
+            try:
+                self.store.set(f"{self.session.engagement_id}:waf_fingerprint", json.dumps(fingerprint))
+            except Exception:
+                pass
+        # Verify persistence immediately to avoid downstream preflight skips.
+        persisted = self.store.get_phase_data(self.session.engagement_id, "recon")
+        if not persisted:
+            self.log.warning("Recon phase_data write verification failed; retrying persist.")
+            self.store.set_phase_data(self.session.engagement_id, "recon", bundle)
+
+        # ── EVIDENCE GRAPH ─────────────────────────────────────────────────
+        # Formalise recon output into a structured graph so ExploitationAgent
+        # can query facts deterministically instead of guessing from freetext.
+        try:
+            graph_nodes = []
+            services = bundle.get("services", {}) if isinstance(bundle, dict) else {}
+            for port, svc in services.items():
+                graph_nodes.append({
+                    "node_type": "open_port",
+                    "node_key": str(port),
+                    "attributes": {
+                        "service": svc.get("service", "unknown"),
+                        "protocol": svc.get("protocol", "tcp"),
+                        "version": svc.get("version", ""),
+                        "is_web": svc.get("service", "").lower() in (
+                            "http", "https", "http-proxy", "ssl/http"
+                        ),
+                    },
+                })
+            for port in open_ports:
+                if str(port) not in {n["node_key"] for n in graph_nodes}:
+                    graph_nodes.append({
+                        "node_type": "open_port",
+                        "node_key": str(port),
+                        "attributes": {"service": "unknown", "protocol": "tcp"},
+                    })
+            if is_behind:
+                graph_nodes.append({
+                    "node_type": "waf",
+                    "node_key": str(waf_info),
+                    "attributes": {"confidence": 1.0},
+                })
+            elif results.get("waf_fingerprint"):
+                fp = results["waf_fingerprint"]
+                graph_nodes.append({
+                    "node_type": "waf",
+                    "node_key": str(fp.get("waf_type", "behavioral_waf")),
+                    "attributes": {"confidence": fp.get("confidence", 0.5)},
+                })
+            if root_ip:
+                graph_nodes.append({
+                    "node_type": "resolved_ip",
+                    "node_key": root_ip,
+                    "attributes": {"is_cdn": bundle.get("is_cdn", False)},
+                })
+            if graph_nodes:
+                self.store.store_evidence_graph(self.session.engagement_id, graph_nodes)
+                info(f"Evidence graph written: {len(graph_nodes)} nodes.")
+        except Exception as _eg_err:
+            self.log.warning(f"Evidence graph write failed (non-fatal): {_eg_err}")
+
+        # ===== STEALTH: IP ROTATION (only if Tor is configured) =====
+        if self._ip_rotator is not None:
+            try:
+                self.rotate_tor_ip()
+            except Exception as _tor_err:
+                self.log.warning(f"Post-recon Tor rotation failed (non-fatal): {_tor_err}")
+
+        # Publish event so other agents know recon is done
         self.bus.publish("recon", "exploitation", {
             "event": "recon_complete",
             **bundle
         })
 
-
-        self.store.set_phase_status(
-            self.session.engagement_id, "recon", "complete",
-            f"Open ports: {r.parsed.get('open_ports', [])}. AI: {ai_analysis[:200]}"
-        )
-        success("Recon phase complete.")
-        return results
+        return self.finish_phase(bundle)
