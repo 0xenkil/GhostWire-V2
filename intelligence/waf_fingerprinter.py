@@ -255,7 +255,8 @@ class WafFingerprinter:
                         blocked_methods.append(method)
                     
                     time.sleep(0.2)
-                except:
+                except requests.exceptions.RequestException as e:
+                    if hasattr(self, "log"): self.log.debug(f"Method blocking probe failed: {e}")
                     blocked_methods.append(method)
             
             return blocked_methods
@@ -318,7 +319,8 @@ class WafFingerprinter:
                         blocked_patterns.append(payload[:20])  # Store first 20 chars
                     
                     time.sleep(0.2)
-                except:
+                except requests.exceptions.RequestException as e:
+                    if hasattr(self, "log"): self.log.debug(f"Payload probe failed: {e}")
                     blocked_patterns.append(payload[:20])
             
             return blocked_patterns
@@ -337,7 +339,8 @@ class WafFingerprinter:
                     resp = session.get(target_url, timeout=5)
                     responses.append(resp.status_code)
                     time.sleep(0.5)
-                except:
+                except requests.exceptions.RequestException as e:
+                    if hasattr(self, "log"): self.log.debug(f"IP blocking probe failed: {e}")
                     responses.append(None)
             
             # If we see 429 or 403 after multiple requests, IP blocking likely
@@ -366,7 +369,8 @@ class WafFingerprinter:
                     resp = session.get(target_url, headers={"User-Agent": ua}, timeout=5)
                     responses.append(resp.status_code)
                     time.sleep(0.2)
-                except:
+                except requests.exceptions.RequestException as e:
+                    if hasattr(self, "log"): self.log.debug(f"UA sensitivity probe failed: {e}")
                     responses.append(None)
             
             # If response codes vary significantly, UA sensitivity detected
@@ -388,7 +392,8 @@ class WafFingerprinter:
                     elapsed = time.time() - start
                     times.append(elapsed)
                     time.sleep(0.5)
-                except:
+                except requests.exceptions.RequestException as e:
+                    if hasattr(self, "log"): self.log.debug(f"Timing attack probe failed: {e}")
                     times.append(10)  # Timeout = long delay
             
             # Check if delays increase (exponential pattern)
