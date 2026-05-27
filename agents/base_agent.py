@@ -378,10 +378,12 @@ Target: {self.session.target}
 
 ### MISSION
 You are an autonomous offensive AI. Determine the absolute BEST wordlist approach.
+WAF PRESENCE: High probability. DO NOT USE massive generic lists (e.g. dirb_common with 60k words) as they will get blocked instantly.
+
 You MUST choose one of two options and return a STRICT JSON response. No markdown wrappers.
 
-Option 1 (Fetch): Provide a one-liner bash command to download a highly-relevant wordlist from a reliable source (like GitHub raw Seclists) to '{config_paths.VPS_TEMP_DIR}/ai_wordlist.txt'.
-Option 2 (Generate): Generate a highly-targeted micro-wordlist (50-100 entries) specific to the tech stack.
+Option 1 (Generate - RECOMMENDED): Generate a highly-targeted micro-wordlist (50-500 entries max) specific to the tech stack (e.g., WordPress config files, specific API endpoints).
+Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant, SMALL wordlist from a reliable source to '{config_paths.VPS_TEMP_DIR}/ai_wordlist.txt'.
 
 ### RESPONSE SCHEMA
 {{
