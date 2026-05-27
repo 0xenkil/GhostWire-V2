@@ -1752,16 +1752,21 @@ Option 2 (Generate): Generate a highly-targeted micro-wordlist (50-100 entries) 
         # in the agent loop. There is no need for `_harden_shell_cmd` to force wordlist overrides anymore.
 
         if lower == "gobuster":
-            # If it's a directory scan, add a calibrated exclude-length.
-            # We exclude len_rand ± 30 as a comma-separated list to account for
-            # significant byte-count drift between our HTTP probe and gobuster's internal probe,
-            # especially behind modern WAFs like Cloudflare that inject dynamic tokens.
-            if " dir " in command and len_rand > 0:
-                exclude_lengths = ",".join(str(len_rand + d) for d in range(-30, 31) if (len_rand + d) > 0)
-                exclude_flag = f" --exclude-length {exclude_lengths}"
+            if " dir " in command:
+                if "--wildcard" not in command:
+                    command = f"{command} --wildcard"
                 
-                if "--exclude-length" not in command:
-                    return f"{command}{exclude_flag}"
+                # If wildcard is an error code, simply blacklist it
+                if st_rand in [403, 500, 503, 400]:
+                    if "-b " in command:
+                        command = re.sub(r'-b\s+([\d,]+)', f'-b \\1,{st_rand}', command)
+                    else:
+                        command += f" -b 404,{st_rand}"
+                elif len_rand > 0:
+                    # For 200 OK wildcards, exclude the exact lengths (±5 jitter instead of ±30 which crashes it)
+                    exclude_lengths = ",".join(str(len_rand + d) for d in range(-5, 6) if (len_rand + d) > 0)
+                    if "--exclude-length" not in command:
+                        command += f" --exclude-length {exclude_lengths}"
             return command
 
         if lower == "ffuf":
