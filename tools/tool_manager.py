@@ -748,12 +748,14 @@ class ToolManager:
 
             if exit_code == -2:
                 status = "timeout"
-            elif exit_code == 0:
+            elif exit_code == 0 or has_fatal_error:
                 if has_fatal_error and tool_name in {"curl", "wget", "gobuster", "ffuf", "nikto", "nuclei", "sslscan", "whatweb"}:
-                    status = "failed"
+                    status = "blocked"
                     exit_code = 1
-                else:
+                elif exit_code == 0:
                     status = "success"
+                else:
+                    status = "failed"
             else:
                 # Some tools exit non-zero but produce valid output (e.g. nmap on filtered ports)
                 known_partial_success = {"nmap", "masscan", "nikto", "nuclei", "gobuster", "ffuf"}
