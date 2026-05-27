@@ -209,7 +209,7 @@ class ReconAgent(BaseAgent):
         return added
 
     async def run(self) -> dict:
-        section("PHASE 2 â€” Reconnaissance")
+        section("PHASE 2 - Reconnaissance")
         self.store.set_phase_status(self.session.engagement_id, "recon", "running")
 
         # ── TARGET NORMALIZATION (Robust V6) ─────────────────────────────────
