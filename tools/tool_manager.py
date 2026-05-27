@@ -741,6 +741,7 @@ class ToolManager:
                 "host maximum execution time",
                 "certificate verify failed",
                 "empty reply from server",
+                "\": eof",
             )
             combined_output = f"{stdout}\n{stderr}".lower()
             has_fatal_error = any(marker in combined_output for marker in fatal_error_markers)
