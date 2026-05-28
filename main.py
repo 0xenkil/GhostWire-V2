@@ -34,7 +34,15 @@ if sys.platform == "win32":
                         ("dwMaximumWindowSize", wintypes._COORD)]
         csbi = CSBI()
         if ctypes.windll.kernel32.GetConsoleScreenBufferInfo(handle, ctypes.byref(csbi)):
-            ctypes.windll.kernel32.SetConsoleScreenBufferSize(handle, wintypes._COORD(csbi.dwSize.X, 32000))
+            # 32767 is the absolute Windows SHORT max — cannot go higher
+            _MAX_BUFFER = 32767
+            ok = ctypes.windll.kernel32.SetConsoleScreenBufferSize(
+                handle, wintypes._COORD(csbi.dwSize.X, _MAX_BUFFER)
+            )
+            if ok:
+                print(f"  [SYS] Console buffer expanded to {_MAX_BUFFER} lines.")
+            else:
+                print(f"  [SYS] Console buffer expansion failed (current: {csbi.dwSize.Y} lines).")
     except Exception:
         pass
 

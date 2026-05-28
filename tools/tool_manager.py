@@ -466,21 +466,25 @@ class ToolManager:
                     concise_lines.append(s)
                 lines = concise_lines
 
-            # Cap individual lines at 2000 chars (handles nuclei base64 encoded fields)
-            # No line count cap - show all output so findings are never silently hidden
-            # Actually, user complained about "cli rates of characters", so let's cap it
-            # but mention the full log is available.
-            MAX_DISPLAY_LINES = 100
+            # Show as much output as possible while protecting CMD scrollback buffer.
+            # Full uncut output is always saved to the VPS results file.
+            MAX_DISPLAY_LINES = 300
             if len(lines) > MAX_DISPLAY_LINES:
+                HEAD_LINES = 200
+                TAIL_LINES = 30
+                omitted = len(lines) - HEAD_LINES - TAIL_LINES
                 display_lines = [
                     line[:2000] + (" ...[line truncated]" if len(line) > 2000 else "")
-                    for line in lines[:80]
+                    for line in lines[:HEAD_LINES]
                 ]
                 content.append("\n".join(display_lines), style="dim white")
-                content.append(f"\n\n... [ {len(lines) - 90} lines omitted for brevity ] ...\n\n", style="bold yellow")
+                content.append(
+                    f"\n\n  ─── [ {omitted} lines omitted · full output saved to VPS results ] ───\n\n",
+                    style="bold yellow"
+                )
                 display_lines_tail = [
                     line[:2000] + (" ...[line truncated]" if len(line) > 2000 else "")
-                    for line in lines[-10:]
+                    for line in lines[-TAIL_LINES:]
                 ]
                 content.append("\n".join(display_lines_tail), style="dim white")
             else:
@@ -723,7 +727,7 @@ class ToolManager:
                     console.print(f"\n[bold bright_magenta]▰▰▰ VPS LIVE FEED ›[/bold bright_magenta] [dim]{command[:180]}[/dim]")
                 printed_lines = []
 
-                MAX_LIVE_LINES = 200
+                MAX_LIVE_LINES = 500
                 seen_live_lines = set()  # Dedup guard for live feed output
                 def on_line(line: str) -> None:
                     if silent or len(printed_lines) >= MAX_LIVE_LINES:
@@ -746,7 +750,7 @@ class ToolManager:
                             printed_lines.append(clean)
                             console.print(f"  [dim]{clean}[/dim]")
                             if len(printed_lines) == MAX_LIVE_LINES:
-                                console.print(f"  [bold yellow]! Live feed capped at {MAX_LIVE_LINES} lines (see logs for full output)[/bold yellow]")
+                                console.print(f"  [bold yellow]! Live feed capped at {MAX_LIVE_LINES} lines (full output saved to VPS results)[/bold yellow]")
 
                 # Use the new resilient tailing mode for long-running tools
                 exit_code, stdout, stderr = self.remote.execute_resilient(
