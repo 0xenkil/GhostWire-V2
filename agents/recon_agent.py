@@ -166,7 +166,7 @@ class ReconAgent(BaseAgent):
                     "target hostname", "target ip", "target port", "target host",
                     "start time", "end time", "nikto v", "server:", "host maximum execution time",
                     "no web server found", "0 host(s)", "1 host(s)", "error:",
-                    "root page", "redirects to",
+                    "root page", "redirects to", "using encoding:", "uncommon header",
                 ]
 
             for finding in parsed.get("findings", [])[:20]:
