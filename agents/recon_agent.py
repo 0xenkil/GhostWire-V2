@@ -150,6 +150,20 @@ class ReconAgent(BaseAgent):
                         path += "/"
                     self.add_finding("app_root", target, path, "info")
 
+        elif tool == "subfinder":
+            for domain in parsed.get("subdomains", [])[:30]:
+                self.add_finding("subdomain", target, domain, "info")
+                added += 1
+
+        elif tool in {"httpx", "curl"}:
+            raw_lines = parsed.get("raw_lines", [])
+            for line in raw_lines[:20]:
+                line = line.strip()
+                if not line: continue
+                if "HTTP/" in line or "200 OK" in line or line.startswith("http"):
+                    self.add_finding("web_server_live", target, line[:100], "info")
+                    added += 1
+
         elif tool == "nikto":
             try:
                 rules = self._load_rules("recon")
@@ -338,8 +352,10 @@ WAF: {fingerprint.get('waf_type') if fingerprint else 'None detected'}
 {findings_summary}
 
 ### MISSION
-You are the GHOSTWIRE V6 Recon Orchestrator. Decide the NEXT 3-5 Linux shell commands to maximize discovery.
-Avoid repeats. Prefer: nmap, masscan, subfinder, gobuster, nikto, nuclei, whatweb, sslscan, ffuf.
+You are the GHOSTWIRE V6 Recon Orchestrator, an intelligent, human-like bug bounty hunter. 
+Your goal is not just to run a checklist of tools, but to PIVOT based on your findings.
+Decide the NEXT 3-5 Linux shell commands to maximize discovery.
+Prefer tools like: nmap, masscan, subfinder, httpx, gobuster, nikto, nuclei, whatweb, sslscan, ffuf.
 DO NOT perform UDP scans (e.g. nmap -sU) as they are too slow and will timeout.
 
 ### PREVIOUSLY EXECUTED COMMANDS
@@ -347,7 +363,8 @@ DO NOT perform UDP scans (e.g. nmap -sU) as they are too slow and will timeout.
 
 ### RULES
 - Return ONLY a JSON array of objects: [{{"command": "...", "reason": "...", "timeout": <integer_seconds>}}]
-- CRITICAL - Set a realistic timeout for each tool. Quick probes (curl/dig) = 60s. Heavy scanners (nmap/gobuster/nuclei/ffuf) = 900s. Do NOT hardcode 200s for heavy scanners.
+- CRITICAL - Set a realistic timeout for each tool. Quick probes (curl/dig/httpx) = 60s. Heavy scanners = 900s.
+- PIVOTING - If you see subdomains in the findings, do NOT ignore them! Probe them (e.g., `httpx -u <subdomain>` or `curl -sI`). If you see a new open port, investigate it! Think like a hacker.
 - CRITICAL - Target format by tool type:
   * HTTP tools (nikto, gobuster, ffuf, nuclei, whatweb, curl): use full URL -> {target}
   * Raw-socket / SSL tools (nmap, masscan, sslscan, dig, subfinder): use bare hostname -> {host}
