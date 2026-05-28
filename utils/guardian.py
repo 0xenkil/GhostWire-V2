@@ -19,13 +19,17 @@ ALLOWED_RECON_TOOLS = {
     "host", "traceroute", "ping", "mtr", "dnsenum",
     "fierce", "theHarvester", "assetfinder", "ssltest", "nuclei",
     "subfinder", "wafw00f", "dirsearch", "dirb", "proxychains4", "proxychains", "httpx",
+    "amass", "katana", "hakrawler", "gau", "waybackurls", "arjun", "dalfox", 
+    "naabu", "rustscan", "dnsrecon", "dnsx", "feroxbuster", "wfuzz", "kiterunner", 
+    "trufflehog", "gitleaks", "smbclient", "smbmap", "crackmapexec", "netexec", 
+    "wpscan", "joomscan", "droopescan", "snmpwalk", "snmpcheck", "ldapsearch",
     # Wrappers
     "timeout",
     # Exploitation tools
     "hydra", "msfconsole", "john", "sqlmap", "nikto",
     "curl", "wget", "nmap", "sslscan", "nc",
     "nessus", "metasploit", "crunch", "python3", "python",
-    "react_payload", "python_payload",
+    "react_payload", "python_payload", "hashcat", "searchsploit", "commix",
 }
 
 # Blocked patterns (destructive, write, exec, etc.)
