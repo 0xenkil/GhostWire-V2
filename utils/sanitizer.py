@@ -22,14 +22,16 @@ def remove_artifacts(text: str) -> str:
     text = text.replace("[2K", "")
     return text
 
-def normalize_whitespace(text: str) -> str:
-    """Normalize multi-space blocks and newlines for consistent parsing."""
-    return " ".join(text.split())
+
 
 def clean_text(text: str) -> str:
     """Universal cleaner for tool outputs and inputs. (v5.0 Universal Fix)"""
     if not text:
         return ""
+    # Normalize Windows CRLF to prevent \r matching from destroying valid lines
+    text = text.replace("\r\n", "\n")
+    # Simulate terminal \r (carriage return) by keeping only the text after the last \r on a line
+    text = re.sub(r'[^\n]*\r', '', text)
     text = remove_ansi(text)
     text = remove_artifacts(text)
     return text.strip()
@@ -39,7 +41,7 @@ def clean_target(target: str) -> str:
     if not target:
         return ""
     target = clean_text(target)
-    # Remove any character that isn't a domain/IP character
-    # Keep A-Za-z0-9, dots, hyphens, colons (ports/IPv6), and slashes (paths)
-    target = re.sub(r'[^a-zA-Z0-9\.\-\:\/]', '', target)
+    # Remove any character that isn't valid in a URL, domain, or IP.
+    # We now allow _, ?, &, =, #, %, ~ for full URLs
+    target = re.sub(r'[^a-zA-Z0-9\.\-\:\/\_\?\&\=\#\%\~]', '', target)
     return target

@@ -1,8 +1,8 @@
 import json
 import re
-from pathlib import Path
 from agents.base_agent import BaseAgent
 from utils.display import section, info, warning, success
+from utils.poc_customizer import PoCCustomizer
 from config import USE_REMOTE_VPS
 
 class WeaponizationAgent(BaseAgent):
@@ -13,7 +13,19 @@ class WeaponizationAgent(BaseAgent):
     """
 
     def _preflight(self) -> tuple[bool, str]:
-        """Pre-flight: ensure exploitation completed."""
+        """Pre-flight: ensure exploitation completed and core tools available."""
+        self.log.info("Performing weaponization pre-flight checks...")
+        
+        # Check core tools
+        core_tools = ["gcc", "python3", "pip3", "git", "curl"]
+        missing = []
+        for tool in core_tools:
+            if not self.tools.ensure_installed(tool):
+                missing.append(tool)
+        
+        if missing:
+            self.log.warning(f"Critical weaponization tools missing: {', '.join(missing)}")
+
         # Check phase_data first (primary), then fall back to phase status + findings
         exploit_data = self.store.get_phase_data(self.session.engagement_id, "exploitation")
         if exploit_data is not None:
@@ -32,8 +44,8 @@ class WeaponizationAgent(BaseAgent):
 
         return False, "Exploitation phase has no data. Cannot weaponize without findings."
 
-    def run(self) -> dict:
-        section("PHASE 4 — Weaponization & PoC Validation")
+    async def run(self) -> dict:
+        section("PHASE 4 - Weaponization & PoC Validation")
         self.store.set_phase_status(self.session.engagement_id, "weaponization", "running")
 
         roe = self.session.rules_of_engagement
@@ -49,55 +61,79 @@ class WeaponizationAgent(BaseAgent):
 
         # Gather all findings from previous phases
         all_findings = self.store.get_all_findings(self.session.engagement_id)
+
+        # ── Load Dynamic Rules ──────────────────────────────────────────────────
+        rules = self._load_rules("weaponization")
+        WEAPONIZABLE_TYPES = set(rules.get("weaponizable_types", [
+            "sql_injection", "sqli", "xss", "lfi", "rfi", "rce", "ssrf", "ssti", "xxe",
+            "sensitive_data", "directory_listing", "backup_file", "git_repo",
+            "exposed_config", "env_file", "unauthorized_access",
+            "idor", "broken_auth", "csrf", "open_redirect", "jwt_weakness",
+            "cors_misconfig", "subdomain_takeover",
+            "vulnerability", "web_vulnerability", "web_vulnerability_hint",
+            "cve", "ai_dynamic_exploit"
+        ]))
         
-        # ── Exploitable finding filter ─────────────────────────────────────────
-        # Only pick findings that represent REAL attack surface, not recon noise.
-        # These type prefixes are informational/recon metadata — NOT exploits:
-        NOISE_TYPES = {
-            "ai_dynamic_recon",   # whatweb/nikto/sslscan stdout dumps
-            "tech_stack",         # "SPA Framework: React" — not a vuln
-            "rate_limited",       # HTTP 429 detection — defensive, not offensive
-            "open_port",          # Port listing from nmap — not a vuln
-            "dns_record",         # DNS recon output
-            "whois",              # WHOIS data
-            "engagement_plan",    # Setup metadata
-            "objectives_assessment",  # AI narrative assessment
-            "security_header_present",  # Good security header found
-            "network_defense",    # TCP RST detection
-        }
-        # Only weaponize if finding type looks like an actual exploitable class
-        EXPLOIT_TYPE_KEYWORDS = [
-            "sql", "xss", "lfi", "rfi", "rce", "ssrf", "ssti", "xxe",
-            "injection", "traversal", "path", "exposure", "disclosure",
-            "upload", "deserialization", "misconfig", "cors_misconfig",
-            "vulnerability", "missing_security_header", "ssl_weakness",
-            "discovered_path", "waf_discovered", "captcha_detected",
-            "web_vulnerability", "proven_", "nuclei", "credential",
-        ]
+        # Nikto noise: informational Nikto lines that pass 'web_vulnerability' type
+        # but contain no exploitable content - skip these regardless of type match.
+        DETAIL_NOISE_PATTERNS = rules.get("noise_patterns", [
+            "uncommon header", "x-hcdn-request-id", "alt-svc", "maximum execution time",
+            "items checked", "target ip", "target hostname", "1 host(s) tested",
+            "<!doctype html", "<html", "<body",
+            # Header-only findings are never weaponizable on their own
+            "missing csp", "missing hsts", "missing x-frame", "missing x-content",
+            "missing permissions-policy", "core security headers present",
+        ])
+
+        SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
+
         exploitable_findings = []
         for f in all_findings:
             sev = f.get("severity", "").lower()
-            typ = f.get("type", "").lower()
-            if not typ:
-                typ = f.get("finding_type", "").lower()
+            typ = f.get("type", "") or f.get("finding_type", "")
+            typ_lower = typ.lower()
+            detail = (f.get("detail", "") or "").lower()
 
-            # Skip noise types entirely regardless of severity
-            if any(typ == noise or typ.startswith(noise) for noise in NOISE_TYPES):
+            # Must match a weaponizable type
+            if not any(wt in typ_lower for wt in WEAPONIZABLE_TYPES):
                 continue
 
-            # Must be high/critical, OR a recognized exploitable type keyword
-            is_high_sev = sev in ["high", "critical"]
-            is_exploitable_type = any(kw in typ for kw in EXPLOIT_TYPE_KEYWORDS)
+            # Skip Nikto informational noise even if it matches web_vulnerability
+            if any(pat in detail for pat in DETAIL_NOISE_PATTERNS):
+                continue
 
-            if is_high_sev or is_exploitable_type:
-                exploitable_findings.append(f)
+            # web_vulnerability only gets PoC if it's actually high/critical,
+            # OR it's medium but has real exploit keywords in the detail.
+            MEDIUM_EXPLOIT_KEYWORDS = [
+                "clickjack", "x-frame", "cors", "open redirect", "csrf",
+                "injection", "traversal", "disclosure", "exposure", "header missing",
+            ]
+            if typ_lower == "web_vulnerability" and sev not in ("high", "critical"):
+                if sev != "medium" or not any(kw in detail for kw in MEDIUM_EXPLOIT_KEYWORDS):
+                    continue
+
+            # ai_dynamic_exploit: skip if output is homepage HTML (pre-fix DB records)
+            if typ_lower == "ai_dynamic_exploit":
+                if any(x in detail for x in ["<!doctype", "wp-content", "litespeed", "<html"]):
+                    continue
+
+            # http_request_smuggling: skip pre-fix false positives (WP admin keyword match)
+            if typ_lower == "http_request_smuggling":
+                if "wp-content" in detail or "<!doctype" in detail or "downgrade" in detail:
+                    # "downgrade" was the old false-positive wording
+                    continue
+
+            exploitable_findings.append(f)
+
+        # Sort by severity so the top-3 cap picks the most impactful findings first
+        exploitable_findings.sort(key=lambda x: SEV_ORDER.get(x.get("severity", "info").lower(), 4))
 
         if not exploitable_findings:
-            info("No high/critical vulnerabilities found to weaponize. Generating standard payloads instead.")
+            info("No confirmed exploitable vulnerabilities found. Generating standard payloads instead.")
             self._generate_standard_payloads(results)
         else:
-            info(f"Found {len(exploitable_findings)} exploitable vulnerabilities. Synthesizing dynamic PoCs...")
-            # Cap at top 3 to save time and API tokens during execution
+            info(f"Found {len(exploitable_findings)} confirmed exploitable findings. Synthesizing dynamic PoCs...")
+            # Cap at top 3 highest-severity findings
             for finding in exploitable_findings[:3]:
                 self._synthesize_and_execute_poc(finding, results)
 
@@ -117,79 +153,320 @@ class WeaponizationAgent(BaseAgent):
         target = self.session.target
         vuln_type = finding.get("type", "Unknown")
         vuln_detail = finding.get("detail", "")
-        
-        info(f"Synthesizing dynamic PoC for: {vuln_type}...")
-        
-        prompt = (
-            f"You are the GHOSTWIRE V3 Engine. We found a vulnerability on {target}:\n"
-            f"Type: {vuln_type}\nDetails: {vuln_detail}\n\n"
-            f"Write a standalone Python 3 script to non-destructively exploit this vulnerability. "
-            f"The script must attempt to extract benign proof (e.g., /etc/passwd, database version, or a callback). "
-            f"Return ONLY the raw Python code. Do not include markdown blocks, explanations, or backticks. "
-            f"Ensure it uses standard libraries (requests, socket, urllib) and prints 'VULN_PROVEN: <data>' on success."
-        )
-        
-        script_code = self.think(prompt).strip()
-        # Clean up any markdown formatting if the AI hallucinated it
-        if script_code.startswith("```"):
-            script_code = re.sub(r"^```python\n?", "", script_code)
-            script_code = re.sub(r"^```\n?", "", script_code)
-            script_code = re.sub(r"```$", "", script_code).strip()
+        # rules loaded but not needed here - logic is inline
 
-        # Save script locally
+        info(f"Synthesizing PoC for: {vuln_type} ({finding.get('severity', '?').upper()})...")
+
+        # ── Step 1: Try template-driven PoC (reliable, FP-guarded) ────────────
+        from utils.poc_templates import get_poc_template
+        template, defaults = get_poc_template(vuln_type, vuln_detail)
+
+        if template:
+            # ──── NEW: Customize template params based on recon data ────
+            customizer = PoCCustomizer(self.session.engagement_id, self.store, self.log)
+            try:
+                custom_params = customizer.customize_poc_params(target, vuln_type, vuln_detail)
+            except Exception as customizer_err:
+                warning(f"PoC customization failed, falling back to template defaults: {customizer_err}")
+                custom_params = {
+                    "target": target,
+                    "endpoints_to_test": ["/"],
+                    "headers_to_check": [],
+                    "framework": "unknown",
+                    "hosting": "unknown",
+                    "reason": f"Fallback after customization error: {customizer_err}",
+                }
+            
+            # Merge: custom params from recon override defaults
+            defaults.update(custom_params)
+            
+            info(f"PoC customized based on recon: {custom_params.get('reason', 'target profiling')}")
+            
+            # Ask AI to fill in target-specific params (not write exploit code)
+            param_prompt = (
+                f"We're testing {target} for {vuln_type}.\n"
+                f"Finding detail: {vuln_detail}\n"
+                f"Target profile: {custom_params.get('framework', 'unknown')} on {custom_params.get('hosting', 'unknown')}\n\n"
+                f"We need these parameters for our exploit template:\n"
+                f"- path: The URL path most likely vulnerable (e.g. /search, /api/v1/users, /). Default: {defaults.get('path', '/')}\n"
+                f"- param: The query parameter name most likely injectable. Default: {defaults.get('param', 'id')}\n"
+            )
+            if "credential" in vuln_type.lower() or "valid_credential" in vuln_type.lower():
+                # Extract creds from finding detail
+                param_prompt += (
+                    f"- username: extracted username. Default: {defaults.get('username', 'admin')}\n"
+                    f"- password: extracted password. Default: {defaults.get('password', 'admin')}\n"
+                    f"- login_path: login endpoint. Default: {defaults.get('login_path', '/wp-login.php')}\n"
+                )
+            param_prompt += (
+                "\nReturn ONLY a JSON object with these keys. Nothing else. Example: "
+                '{"path": "/search", "param": "q"}'
+            )
+
+            try:
+                ai_params_raw = self.think(param_prompt).strip()
+                if ai_params_raw.startswith("```"):
+                    ai_params_raw = re.sub(r"^```(?:json)?\n?", "", ai_params_raw)
+                    ai_params_raw = re.sub(r"```$", "", ai_params_raw).strip()
+                ai_params = json.loads(ai_params_raw, strict=False)
+            except Exception:
+                ai_params = {}
+
+            # Merge: AI overrides defaults, but target always set
+            params = {**defaults, **ai_params}
+            target_url = f"https://{target}" if "://" not in target else target
+            params["target"] = target_url
+
+            # Safe substitution: replace only known {key} placeholders.
+            # str.format(**params) crashes on any { or } in PoC code (dict literals,
+            # JSON bodies, f-strings, etc.).
+            script_code = template
+            for key, val in params.items():
+                script_code = script_code.replace(f"{{{key}}}", str(val))
+            poc_source = "template"
+        else:
+            # ── Step 2: AI-generated fallback (no template match) ─────────────
+            # First, customize params from recon data to give AI better context
+            customizer = PoCCustomizer(self.session.engagement_id, self.store, self.log)
+            try:
+                custom_params = customizer.customize_poc_params(target, vuln_type, vuln_detail)
+            except Exception as customizer_err:
+                warning(f"PoC customization failed, using minimal fallback context: {customizer_err}")
+                custom_params = {
+                    "target": target,
+                    "endpoints_to_test": ["/"],
+                    "framework": "unknown",
+                    "hosting": "unknown",
+                    "reason": f"Fallback after customization error: {customizer_err}",
+                }
+            
+            framework = custom_params.get("framework", "unknown")
+            hosting = custom_params.get("hosting", "unknown")
+            endpoints = custom_params.get("endpoints_to_test", ["/"])
+            
+            # Build specific verification guidance based on vulnerability type
+            verification_hints = {
+                "disclosure": "Check response headers (Server, X-Powered-By, X-Version, etc) and HTTP error pages for leaked version/tech info",
+                "information_disclosure": "Look for version numbers, software names, framework identifiers in headers and error responses",
+                "header": "Parse response headers for any non-standard or sensitive headers like X-Internal-IP, X-Backend-IP, etc",
+                "misconfiguration": "Test for debug endpoints, open admin paths, enabled debug modes in error pages",
+                "debug": "Look for stack traces, verbose error messages, or debug information in responses",
+                "xxe": "Check for XML parsing errors or entity expansion indicators (root:x:0 for XXE blind)",
+                "ssrf": "Look for responses containing internal metadata (AWS, GCP, Azure metadata), localhost responses, or unusual headers",
+                "open_redirect": "Check if redirects occur to unexpected locations; verify Location header changes",
+                "traversal": "Test if file contents (like /etc/passwd or config files) are returned in responses",
+            }
+            
+            # Find the most relevant hint
+            verification_hint = ""
+            for key, hint in verification_hints.items():
+                if key in vuln_type.lower() or key in vuln_detail.lower():
+                    verification_hint = f"\nVERIFICATION FOCUS: {hint}"
+                    break
+            
+            if not verification_hint:
+                # Default generic hint
+                verification_hint = "\nVERIFICATION FOCUS: Look for specific indicators unique to this vulnerability (not generic 404/homepage responses)"
+            
+            prompt = (
+                f"You are the GHOSTWIRE V5 PoC Engine. Generate a PRECISE exploit for this finding:\n\n"
+                f"TARGET: {target}\n"
+                f"VULNERABILITY TYPE: {vuln_type}\n"
+                f"SEVERITY: {finding.get('severity', 'high').upper()}\n"
+                f"FINDING DETAIL: {vuln_detail}\n"
+                f"FRAMEWORK: {framework}\n"
+                f"HOSTING: {hosting}\n"
+                f"ENDPOINTS: {', '.join(endpoints[:10])}\n\n"
+                f"YOUR TASK: Write ONLY Python 3 code that:\n"
+                f"1. Uses the finding detail to target SPECIFIC endpoints/parameters (not random fuzzing)\n"
+                f"2. Tests the exact vulnerability type discovered\n"
+                f"3. Produces hardened proof with SPECIFIC indicators (not generic 404/homepage check)\n"
+                f"4. Returns 'VULN_PROVEN: <proof>' on success or 'NOT_PROVEN: <reason>' on failure\n\n"
+                f"MUST-HAVE VERIFICATION:\n"
+                f"- IF SQLi: Look for 'SQL syntax error', 'mysql', 'mariadb', 'postgresql', 'ora-', or time-based delay (SLEEP(5))\n"
+                f"- IF XSS: Check for reflected payload (not homepage/404/generic response)\n"
+                f"- IF LFI: Verify /etc/passwd, /etc/hosts, or config file CONTENT (not 404)\n"
+                f"- IF RCE: Look for command execution indicators (uid=, gid=, hostname output)\n"
+                f"- IF SSRF: Check for metadata responses (169.254.169.254) or internal IP responses\n"
+                f"- IF DISCLOSURE: Look for version numbers, API keys, secrets (not generic Server header)\n"
+                f"- IF AUTH: Test actual credentials or auth bypass (not just 200 status)\n\n"
+                f"RULES:\n"
+                f"- Import only: requests, urllib3, socket, ssl, subprocess, re, json, base64\n"
+                f"- Use: requests.get(url, verify=False, timeout=15, allow_redirects=False)\n"
+                f"- Handle SSL: import urllib3; urllib3.disable_warnings()\n"
+                f"- NEVER check for homepage HTML as proof (check '<!doctype', 'wp-content', etc as NEGATIVE)\n"
+                f"- Compare against baseline responses - if normal target returns same, it's a FP\n"
+                f"- On exception, print 'NOT_PROVEN: <exception_type>'\n"
+                f"- Return ONLY raw Python code, NO explanations, NO markdown"
+            )
+            script_code = self.think(prompt).strip()
+            # Strip markdown code fences
+            if script_code.startswith("```"):
+                script_code = re.sub(r"^```(?:python|py)?\s*\n?", "", script_code)
+                script_code = re.sub(r"\n?```\s*$", "", script_code).strip()
+            poc_source = "ai_generated"
+
+            # ── Guardian Validation (Pre-Execution) ───────────────────
+            if self.validation:
+                is_ok, fixed_code, reason = self.validation.validate_python(script_code)
+                if not is_ok:
+                    warning(f"Guardian blocked sketchy PoC: {reason}")
+                    return # Skip this PoC
+                if fixed_code != script_code:
+                    info(f"Guardian repaired PoC script: {reason}")
+                    script_code = fixed_code
+
+        # ── Save & Execute ────────────────────────────────────────────────────
         safe_name = re.sub(r'[^a-zA-Z0-9]', '_', vuln_type).lower()[:20]
         script_name = f"poc_{safe_name}.py"
         local_script_path = self.session.results_dir / "raw" / script_name
         local_script_path.write_text(script_code, encoding="utf-8")
-        
-        info(f"Generated PoC script: {script_name}. Executing...")
 
-        # Execute script securely
+        info(f"Generated PoC ({poc_source}): {script_name}. Executing...")
+
+        # Execute with timeout and stability fallbacks (Ghost Protocol)
         if USE_REMOTE_VPS and self.tools.remote:
             remote_script_path = f"/tmp/{script_name}"
             self.tools.remote.upload_content(script_code, remote_script_path)
-            exit_code, out, err = self.tools.remote.execute(f"python3 {remote_script_path}", timeout=45)
-            combined_out = out + err
+            # Use python_payload virtual tool in safe_run_tool for VPS stabilization
+            r = self.safe_run_tool("python_payload", f"python3 {remote_script_path}", target)
         else:
-            r = self.safe_run_tool("python", f"python {local_script_path}", target)
-            combined_out = r.stdout + r.stderr
+            r = self.safe_run_tool("python3", f"python3 \"{local_script_path}\"", target)
+            
+        # BUG-17: Only check stdout for VULN_PROVEN - stderr is infrastructure noise
+        # and must NOT cause rejection of a valid proof in stdout.
+        proof_stdout = r.stdout
+        combined_out = r.stdout + r.stderr  # kept for legacy checks only
 
-        # Check for proof of successful exploitation
-        if "VULN_PROVEN" in combined_out or "root:x:0" in combined_out or "SQL syntax" in combined_out:
+        # ── Validate proof ────────────────────────────────────────────────────
+        # AI driven validation will be used below
+        vuln_proven = False
+        proven_data = ""
+
+        # Establish baseline for FP detection
+        recon_data = self.store.get_phase_data(self.session.engagement_id, "recon") or {}
+        baseline_size = recon_data.get("baseline_size", 0)
+
+        if "VULN_PROVEN:" in proof_stdout:
+            match = re.search(r"VULN_PROVEN:\s*(.+)", proof_stdout)
+            if match:
+                proof_text = match.group(1).strip()
+
+                # Use AI-driven robust FP detector
+                if self._is_false_positive(vuln_detail, response_body=proof_text, baseline_size=baseline_size):
+                    warning("AI evaluation determined PoC output is a false positive or failure. Rejecting.")
+                    vuln_proven = False
+                elif len(proof_text) < 5:
+                    warning("PoC output too short to be credible. Rejecting.")
+                    vuln_proven = False
+                else:
+                    vuln_proven = True
+                    proven_data = proof_text
+        elif "root:x:0" in proof_stdout:
+            vuln_proven = True
+            proven_data = "LFI confirmed: /etc/passwd leaked"
+        elif "SQL syntax" in proof_stdout:
+            vuln_proven = True
+            proven_data = "SQLi confirmed: SQL error in response"
+
+        if vuln_proven:
             success(f"[PROVEN] Exploit successful for {vuln_type}!")
-            self.add_finding(f"proven_{vuln_type}", target, f"PoC Execution Output: {combined_out[:500]}", "critical")
-            results["proven_exploits"].append(vuln_type)
+            self.add_finding(f"proven_{vuln_type}", target,
+                              f"PoC script: {script_name}\nProof: {proven_data[:400]}", "critical")
+            results["proven_exploits"].append({
+                "type": vuln_type, 
+                "proof": proven_data[:200], 
+                "source": poc_source,
+                "script": script_name
+            })
         else:
-            warning(f"PoC execution failed or was not conclusive for {vuln_type}.")
+            # Log what the PoC actually returned for debugging
+            not_proven_match = re.search(r"NOT_PROVEN:\s*(.+)", combined_out)
+            reason = not_proven_match.group(1).strip() if not_proven_match else "No output"
+            warning(f"PoC not conclusive for {vuln_type}: {reason[:100]}")
+
+            # Nuclei-confirmed findings ARE confirmed even without an active PoC.
+            # Template match = confirmed vulnerability. Store as high-confidence finding
+            # so it appears in the report even if automated exploitation failed.
+            if vuln_type.lower() in ("vulnerability",) and finding.get("severity", "").lower() in ("critical", "high", "medium"):
+                nuclei_detail = finding.get("detail", vuln_type)
+                results["proven_exploits"].append({
+                    "type": vuln_type,
+                    "proof": f"[Nuclei Template Confirmed] {nuclei_detail[:300]}",
+                    "source": "nuclei_template"
+                })
+                self.add_finding(
+                    "nuclei_confirmed", target,
+                    f"[Nuclei Template Match] {nuclei_detail}",
+                    finding.get("severity", "medium")
+                )
+                success(f"[NUCLEI CONFIRMED] {nuclei_detail[:80]} stored as confirmed finding.")
+
 
     def _generate_standard_payloads(self, results: dict):
         # EICAR test file (industry-standard non-malicious AV test)
-        eicar = r'X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*'
+        rules = self._load_rules("weaponization")
+        eicar = rules.get("eicar_string", r'X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*')
         eicar_path = self.session.results_dir / "raw" / "eicar_test.txt"
-        eicar_path.write_text(encoding="utf-8", data=eicar)
+        eicar_path.write_text(eicar, encoding="utf-8")
         info(f"EICAR test file created at: {eicar_path}")
         results["eicar_path"] = str(eicar_path)
         self.add_finding("test_payload", self.session.target,
                          "EICAR test file prepared for AV detection testing", "info")
 
-        # NEW: probe the discovered paths from gobuster with python requests
+        # Probe the discovered paths from gobuster with python requests
         all_findings = self.store.get_all_findings(self.session.engagement_id)
-        discovered_paths = [f["detail"] for f in all_findings if f.get("type") == "discovered_path" or f.get("finding_type") == "discovered_path"]
+        discovered_paths = [
+            f.get("detail", "") for f in all_findings
+            if f.get("type") == "discovered_path" or f.get("finding_type") == "discovered_path"
+        ]
         target = self.session.target
 
-        for path_detail in discovered_paths[:5]:  # e.g. "/~admin (HTTP 301)"
+        for path_detail in discovered_paths[:5]:  # e.g. "/wp-admin (HTTP 200)"
+            if not path_detail or " " not in path_detail:
+                continue
             path = path_detail.split(" ")[0]
-            probe_cmd = (
-                f"python3 -c \"import urllib.request; "
-                f"try: "
-                f"req = urllib.request.Request('https://{target}{path}', headers={{'User-Agent': 'Mozilla/5.0'}}); "
-                f"r = urllib.request.urlopen(req, timeout=10); "
-                f"print(f'STATUS: {{r.status}} | BODY: {{r.read(200).decode(\\'utf-8\\', errors=\\'ignore\\')}}'); "
-                f"except Exception as e: print(f'ERROR: {{e}}')\""
+            # Skip /~username CDN wildcards - these are Hostinger /~ redirect noise,
+            # not real directories. Probing them just confirms a 301 CDN response.
+            if path.startswith("/~"):
+                continue
+            # Skip paths that returned 301 only (likely CDN redirects, not real content)
+            if "HTTP 301" in path_detail or "HTTP 302" in path_detail:
+                continue
+
+            # BUG-10: Build a proper temp script instead of a fragile inline -c '...' command.
+            # Inline shell quoting breaks on paths with special characters and is unreadable.
+            p_timeout = rules.get("path_probe_timeout", 10)
+            p_ua = rules.get("path_probe_user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+            probe_url = f"https://{target}{path}"
+            probe_script = (
+                "import urllib.request, ssl, sys\n"
+                f"url = {probe_url!r}\n"
+                f"ua  = {p_ua!r}\n"
+                f"timeout = {p_timeout}\n"
+                "try:\n"
+                "    ctx = ssl.create_default_context()\n"
+                "    ctx.check_hostname = False\n"
+                "    ctx.verify_mode = ssl.CERT_NONE\n"
+                "    req = urllib.request.Request(url, headers={'User-Agent': ua})\n"
+                "    r = urllib.request.urlopen(req, timeout=timeout, context=ctx)\n"
+                "    body = r.read(200).decode('utf-8', errors='ignore')\n"
+                "    print(f'STATUS: {r.status} | BODY: {body}')\n"
+                "except Exception as e:\n"
+                "    print(f'ERROR: {e}')\n"
             )
-            r = self.safe_run_tool("python3", probe_cmd, target)
+            probe_script_name = f"/tmp/gw_probe_{abs(hash(path)) % 100000}.py"
+            if USE_REMOTE_VPS and self.tools.remote:
+                self.tools.remote.upload_content(probe_script, probe_script_name)
+                r = self.safe_run_tool("python_payload", f"python3 {probe_script_name}", target)
+                self.tools.remote.execute(f"rm -f {probe_script_name}")
+            else:
+                local_probe = self.session.results_dir / "raw" / f"probe_{path.lstrip('/').replace('/', '_')}.py"
+                local_probe.write_text(probe_script, encoding="utf-8")
+                r = self.safe_run_tool("python3", f"python3 \"{local_probe}\"", target)
+
             if r.stdout and ("STATUS:" in r.stdout or "ERROR:" in r.stdout):
-                self.add_finding("path_probe", target, 
-                                 f"{path}: {r.stdout[:500]}", "medium")
+                self.add_finding("path_probe", target,
+                                 f"{path}: {r.stdout[:500]}", "low")
                 results["path_probes"] = results.get("path_probes", [])
                 results["path_probes"].append(path)

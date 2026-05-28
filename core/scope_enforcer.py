@@ -47,7 +47,7 @@ class ScopeEnforcer:
                         f"IP '{target}' falls within a protected range: {net}"
                     )
         except ValueError:
-            pass  # Not an IP — domain check already done above
+            pass  # Not an IP - domain check already done above
 
         log.debug(f"Scope check passed for: {target}")
         return True
@@ -58,17 +58,32 @@ class ScopeEnforcer:
         We do NOT use substring matching (e.g. 's in target') to prevent
         false positives like 'space' matching 'myspace.com'.
         """
+        from urllib.parse import urlparse
+        
+        # Normalize target: if it's a URL, extract the hostname
+        check_target = target
+        if "://" in check_target:
+            parsed = urlparse(check_target)
+            if parsed.hostname:
+                check_target = parsed.hostname
+
         for s in self.session.scope:
+            scope_target = s
+            if "://" in scope_target:
+                parsed_s = urlparse(scope_target)
+                if parsed_s.hostname:
+                    scope_target = parsed_s.hostname
+
             # Exact match
-            if target == s:
+            if check_target == scope_target:
                 return True
             # Subdomain suffix match: sub.example.com is in scope if scope has example.com
-            if target.endswith(f".{s}"):
+            if check_target.endswith(f".{scope_target}"):
                 return True
             # CIDR range check
             try:
-                net = ipaddress.ip_network(s, strict=False)
-                ip = ipaddress.ip_address(target)
+                net = ipaddress.ip_network(scope_target, strict=False)
+                ip = ipaddress.ip_address(check_target)
                 if ip in net:
                     return True
             except ValueError:

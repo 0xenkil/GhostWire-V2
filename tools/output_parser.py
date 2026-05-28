@@ -1,4 +1,5 @@
 import re
+import json
 from utils.logger import get_logger
 
 log = get_logger("output_parser")
@@ -15,6 +16,7 @@ class OutputParser:
                 "nikto": self._nikto,
                 "whois": self._whois,
                 "theharvester": self._theharvester,
+                "subfinder": self._subfinder,
                 "gobuster": self._gobuster,
                 "dirb": self._dirb,
                 "ffuf": self._ffuf,
@@ -62,17 +64,17 @@ class OutputParser:
         """Returns open_ports as list of ints for consistency with nmap."""
         ports = []
         port_details = []
-        for line in stdout.splitlines():
-            m = re.search(r'Discovered open port (\d+)/(\w+) on ([\d.]+)', line)
-            if m:
-                port_num = int(m.group(1))
-                if port_num not in ports:
-                    ports.append(port_num)
-                port_details.append({
-                    "port": port_num,
-                    "proto": m.group(2),
-                    "host": m.group(3)
-                })
+        # Use finditer to handle fused lines (masscan results can arrive without newlines)
+        pattern = r'Discovered open port (\d+)/(\w+) on ([\d.]+)'
+        for match in re.finditer(pattern, stdout):
+            port_num = int(match.group(1))
+            if port_num not in ports:
+                ports.append(port_num)
+            port_details.append({
+                "port": port_num,
+                "proto": match.group(2),
+                "host": match.group(3)
+            })
         return {"open_ports": ports, "port_details": port_details}
 
     def _nikto(self, stdout, stderr) -> dict:
@@ -125,6 +127,14 @@ class OutputParser:
             "hosts": list(set(hosts)),
             "ips": list(set(ips))
         }
+
+    def _subfinder(self, stdout, stderr) -> dict:
+        domains = []
+        for line in stdout.splitlines():
+            line = line.strip()
+            if line and not line.startswith("[") and not line.startswith(" "):
+                domains.append(line)
+        return {"subdomains": list(set(domains)), "count": len(set(domains))}
 
     def _gobuster(self, stdout, stderr) -> dict:
         paths = []
@@ -199,25 +209,54 @@ class OutputParser:
         return {"vulnerabilities": vulns, "vulnerable": len(vulns) > 0}
 
     def _nuclei(self, stdout, stderr) -> dict:
-        """Parse nuclei JSONL output."""
+        """Parse nuclei JSONL output, tolerating fused/noisy lines."""
         findings = []
+
+        def _append_finding(data: dict):
+            findings.append({
+                "template_id": data.get("template-id", ""),
+                "name": data.get("info", {}).get("name", ""),
+                "severity": data.get("info", {}).get("severity", "info"),
+                "matched": data.get("matched-at", ""),
+                "type": data.get("type", ""),
+            })
+
+        decoder = json.JSONDecoder()
         for line in stdout.splitlines():
             line = line.strip()
             if not line:
                 continue
-            try:
-                import json
-                data = json.loads(line)
-                findings.append({
-                    "template_id": data.get("template-id", ""),
-                    "name": data.get("info", {}).get("name", ""),
-                    "severity": data.get("info", {}).get("severity", "info"),
-                    "matched": data.get("matched-at", ""),
-                    "type": data.get("type", ""),
-                })
-            except Exception:
-                # Non-JSON line (progress output etc)
-                pass
+
+            # Fast path for clean JSONL
+            if line.startswith("{") and line.endswith("}"):
+                try:
+                    data = json.loads(line)
+                    _append_finding(data)
+                    continue
+                except Exception:
+                    pass
+
+            # Recovery path: walk line and decode all JSON objects found
+            idx = 0
+            decoded_any = False
+            while idx < len(line):
+                start = line.find("{", idx)
+                if start == -1:
+                    break
+                try:
+                    data, end = decoder.raw_decode(line[start:])
+                    if isinstance(data, dict):
+                        _append_finding(data)
+                        decoded_any = True
+                    idx = start + end
+                except Exception:
+                    idx = start + 1
+
+            if not decoded_any:
+                # Ignore known nuclei status/noise lines without spamming logs.
+                noise_markers = ["[", "duration", "hosts", "templates", "progress", "matched\":\"0"]
+                if not any(x in line.lower() for x in noise_markers):
+                    log.debug(f"Nuclei parser skipped non-JSON line: {line[:120]}")
         return {"findings": findings, "count": len(findings)}
 
     def _wafw00f(self, stdout, stderr) -> dict:

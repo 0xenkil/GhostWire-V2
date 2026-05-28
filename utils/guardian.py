@@ -133,7 +133,12 @@ def validate_ai_command(command: str, target: str) -> tuple[bool, str, str]:
                 found = True
                 break
         if not found:
-            return False, f"Target '{target}' missing in command. Out-of-scope scanning is prohibited.", ""
+            # Allow file-based inputs from trusted agent directories where scoped targets are aggregated
+            from config_paths import VPS_TEMP_DIR, VPS_RESULTS_DIR
+            if f"{VPS_TEMP_DIR}/" in cmd_clean or f"{VPS_RESULTS_DIR}/" in cmd_clean or "/tmp/antigravity/" in cmd_clean or "/root/results/" in cmd_clean:
+                pass
+            else:
+                return False, f"Target '{target}' missing in command. Out-of-scope scanning is prohibited.", ""
 
     # 5. Auto-repair: fix nmap script syntax (colon -> equals)
     repaired = re.sub(r"--script:\s*", "--script=", command)

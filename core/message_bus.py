@@ -33,7 +33,9 @@ class MessageBus:
             try:
                 handler(from_agent, payload)
             except Exception as e:
+                import traceback
                 log.error(f"Message handler error on channel '{channel}': {e}")
+                log.error(traceback.format_exc())
 
     def request_reply(self, from_agent: str, to_agent: str, payload: dict,
                        reply_handler: Callable, timeout: float = 30.0):
@@ -47,15 +49,38 @@ class MessageBus:
         event = threading.Event()
 
         def on_reply(sender, data):
-            result["data"] = data
-            event.set()
+            try:
+                # First, call the provided reply_handler if present
+                if callable(reply_handler):
+                    try:
+                        reply_handler(sender, data)
+                    except Exception as e:
+                        log.error(f"reply_handler raised: {e}")
+                # Store the data and signal waiter
+                result["data"] = data
+                event.set()
+            finally:
+                # Unsubscribe this temporary handler to avoid memory leaks
+                with self._lock:
+                    handlers = self._subscribers.get(reply_channel, [])
+                    if on_reply in handlers:
+                        handlers.remove(on_reply)
+                        self._subscribers[reply_channel] = handlers
 
+        # Register temporary reply handler
         self.subscribe(reply_channel, on_reply)
         payload["_reply_to"] = reply_channel
+        # Publish the request
         self.publish(from_agent, to_agent, payload)
 
         got_reply = event.wait(timeout=timeout)
         if not got_reply:
-            log.warning(f"request_reply timeout: {from_agent} → {to_agent}")
+            # Timeout: clean up temporary subscription if still present
+            with self._lock:
+                handlers = self._subscribers.get(reply_channel, [])
+                if on_reply in handlers:
+                    handlers.remove(on_reply)
+                    self._subscribers[reply_channel] = handlers
+            log.warning(f"request_reply timeout: {from_agent} -> {to_agent}")
             return None
         return result.get("data")

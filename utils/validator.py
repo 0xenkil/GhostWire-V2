@@ -41,7 +41,7 @@ def normalize_target(target: str) -> str:
     for prefix in ["https://", "http://", "ftp://"]:
         if target.startswith(prefix):
             target = target[len(prefix):]
-    # Remove trailing slashes and paths — keep only host
+    # Remove trailing slashes and paths - keep only host
     target = target.split("/")[0]
     # Remove port if present
     if ":" in target:
@@ -50,11 +50,4 @@ def normalize_target(target: str) -> str:
             target = parts[0]
     return target
 
-def sanitize_target(target):
-    """Clean and optionally upgrade protocol for a target URL."""
-    target = clean_target(target)
-    # Force https if missing or if it looks like a domain without a protocol
-    if not target.startswith(("http://", "https://")):
-        # If it's a sub/domain like static.xx, upgrade to https
-        target = "https://" + target
-    return target
+
