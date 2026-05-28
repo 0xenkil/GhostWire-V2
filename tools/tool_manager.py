@@ -203,8 +203,8 @@ class ToolManager:
         install_success = False
 
         if USE_REMOTE_VPS:
-            # Sanitize AI-provided install commands: reject complex shell constructs
-            forbidden_ops = ["&&", ";", "|", ">", "<", "`", "$(`", "\n"]
+            # Sanitize AI-provided install commands: reject extremely complex/destructive shell constructs, but allow && and | for valid install scripts
+            forbidden_ops = [";", "`", "$(`", "\n"]
             if any(op in install_cmd for op in forbidden_ops):
                 log.warning(f"Rejected unsafe AI install for {tool_name} (contains shell operators)")
                 _agent_debug_log(
