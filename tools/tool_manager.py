@@ -534,11 +534,24 @@ class ToolManager:
         retry_count = 1 if tool_name in FAST_TOOLS else TOOL_RETRY_COUNT
 
         result = None
+        evasion_level = 1
+        
         for attempt in range(retry_count):
             if attempt > 0:
                 delay = min(2 ** (attempt - 1), 10)
                 log.info(f"Retrying '{tool_name}' (attempt {attempt + 1}/{retry_count})... waiting {delay}s")
                 time.sleep(delay)
+                
+                # If the last failure was a WAF block, apply WafGhostEngine evasion
+                if result and result.status == "waf_blocked":
+                    evasion_level += 1
+                    log.warning(f"WAF Block evasion escalated to Level {evasion_level} for {tool_name}")
+                    try:
+                        from core.waf_ghost_engine import WafGhostEngine
+                        ghost = WafGhostEngine(ssh_executor=self.remote)
+                        command = ghost.transform(command, tool_name, level=evasion_level)
+                    except Exception as e:
+                        log.error(f"Failed to apply WafGhostEngine: {e}")
 
             result = self._execute(tool_name, command, timeout, silent=silent)
 
@@ -586,6 +599,21 @@ class ToolManager:
             if any(marker in combined for marker in ("error", "tls", "unable to connect", "connection refused", "timeout", "empty reply")):
                 result.success = False
                 result.status = "failed"
+                result.exit_code = 1
+
+        # WAF Block Detection (403/429/CAPTCHA)
+        if result.success:
+            combined = (result.stdout + result.stderr).lower()
+            waf_markers = [
+                "403 forbidden", "429 too many requests", "cloudflare ray id",
+                "please verify you are human", "access denied", "waf block",
+                "security challenge", "attention required! | cloudflare",
+                "error 1020"
+            ]
+            if any(marker in combined for marker in waf_markers):
+                log.warning(f"WAF Block Detected for {tool_name}. Escaping to failed state.")
+                result.success = False
+                result.status = "waf_blocked"
                 result.exit_code = 1
 
         # VPS Console output
