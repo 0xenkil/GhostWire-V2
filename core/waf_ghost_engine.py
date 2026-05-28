@@ -108,6 +108,14 @@ class WafGhostEngine:
             if level >= 3:
                 if "ffuf" in command: transformed += " -H \"Connection: close\" -H \"Cache-Control: no-cache\""
 
+        elif "httpx" in command:
+            h_args = " ".join([f'-H "{k}: {v}"' for k, v in headers.items()])
+            transformed = transformed.replace("httpx ", f"httpx {h_args} ")
+            if level >= 2:
+                transformed += " -rl 10 -c 5 -timeout 15 -retries 3"  # slow down and retry
+            if level >= 3:
+                transformed += " -random-agent"
+
         elif "nikto" in command:
             # Nikto doesn't natively support -H for headers via CLI. We will just use evasion flags.
             evasion_mode = "1234" if level >= 2 else "1"
