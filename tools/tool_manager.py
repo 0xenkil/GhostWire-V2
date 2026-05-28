@@ -65,8 +65,7 @@ STREAMING_TOOLS = {"nmap", "nuclei", "gobuster", "nikto", "masscan", "ffuf",
 FAST_TOOLS = {"dig", "curl", "whois", "nc"}
 
 # Virtual tools (internal meta-tools) always 'installed'
-VIRTUAL_TOOLS = {"ai_dynamic_recon", "ai_dynamic_exploit", "react_payload", "python_payload"}
-VIRTUAL_AI_TOOLS = {"ai_dynamic_recon", "ai_dynamic_exploit", "react_payload", "python_payload"}
+from tools.tool_registry import VIRTUAL_TOOLS, VIRTUAL_AI_TOOLS
 
 # Tool fallback mappings: if primary tool unavailable, use alternatives
 TOOL_FALLBACKS = {
