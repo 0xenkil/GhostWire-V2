@@ -46,20 +46,15 @@ class GroqKeyPool:
         log.debug(f"Groq key pool initialized with {total} key(s).")
 
     def _parse_recovery_window(self, error_str: str) -> float:
-        """Parse Groq error message to extract recovery time in seconds.
-        
-        Examples:
-          "Please try again in 4m14.88s"  -> 254.88
-          "Please try again in 2m57.984s" -> 177.984
-          (no match)                        -> self._default_recovery_ttl (3600s)
-        """
+        """Parse Groq error message to extract recovery time in seconds."""
         import re
-        match = re.search(r'try again in (\d+)m([\d.]+)s', error_str, re.IGNORECASE)
+        match = re.search(r'try again in (?:(\d+)h)?(?:(\d+)m)?([\d.]+)s', error_str, re.IGNORECASE)
         if match:
-            minutes = int(match.group(1))
-            seconds = float(match.group(2))
-            total = minutes * 60 + seconds
-            log.debug(f"Parsed recovery window: {minutes}m{seconds}s = {total:.1f}s")
+            hours = int(match.group(1) or 0)
+            minutes = int(match.group(2) or 0)
+            seconds = float(match.group(3))
+            total = hours * 3600 + minutes * 60 + seconds
+            log.debug(f"Parsed recovery window: {total:.1f}s")
             return total
         return self._default_recovery_ttl
 
@@ -765,7 +760,10 @@ class AIBackend:
 
                 # ── TPD: daily token limit hit -> try fallback on different key first ──────
                 if self._is_tpd_error(e):
-                    # Try fallback model on a DIFFERENT key before giving up on this key
+                    # Mark current key as exhausted for the primary model
+                    self._groq_pool.mark_exhausted(key, reason="Daily token limit (TPD)", error_str=err_str)
+                    
+                    # Try fallback model on a DIFFERENT key before giving up on this iteration
                     if not tpd_fallback_tried and GROQ_FALLBACK_MODEL and GROQ_FALLBACK_MODEL != GROQ_MODEL:
                         tpd_fallback_tried = True
                         log.info(f"[->] Primary model hit TPD on key ...{key[-4:]}. Trying fallback model on different key...")
@@ -782,9 +780,6 @@ class AIBackend:
                                 log.debug(f"Fallback model also failed on key ...{next_key[-4:]}: {fallback_err}")
                                 # Fallback failed, continue to normal key exhaustion flow
                     
-                    # Mark current key as exhausted after fallback attempt
-                    # SMART: Parse recovery window from error message
-                    self._groq_pool.mark_exhausted(key, reason="Daily token limit (TPD)", error_str=err_str)
                     if not self._groq_pool.has_keys:
                         log.error("All Groq keys exhausted (TPD).")
                         return None
