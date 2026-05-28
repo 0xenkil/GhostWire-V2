@@ -53,6 +53,27 @@ class WafGhostEngine:
 
         transformed = command
         headers = self._generate_stealth_headers()
+
+        # Origin IP Swapping (WafBypassOrchestrator Integration)
+        try:
+            from intelligence.waf_bypass_orchestrator import WafBypassOrchestrator
+            orchestrator = WafBypassOrchestrator()
+            
+            # Extract target from command for active strategy lookup
+            target_match = re.search(r'https?://([^/\"\'\s]+)', command)
+            if target_match:
+                target_domain = target_match.group(1)
+                active_strategy = orchestrator.get_active_strategy(target_domain)
+                
+                if active_strategy.get("vector") == "origin" and "origin_ip" in active_strategy:
+                    origin_ip = active_strategy["origin_ip"]
+                    # Inject Host header for Origin Bypass
+                    headers["Host"] = active_strategy.get("host_header", target_domain)
+                    # Swap URL domain with IP
+                    transformed = re.sub(rf'https?://{re.escape(target_domain)}', f'http://{origin_ip}', transformed)
+                    log.info(f"Ghost Protocol: Origin Swapping active. Targeting {origin_ip} for {target_domain}")
+        except Exception as e:
+            log.error(f"Ghost Protocol: Failed to lookup active bypass strategy: {e}")
         
         # Phase 1: Header & Protocol Injection
         if "curl" in command:
@@ -116,6 +137,34 @@ class WafGhostEngine:
             if level >= 3:
                 transformed += " -random-agent"
 
+        elif "katana" in command:
+            h_args = " ".join([f'-H "{k}: {v}"' for k, v in headers.items()])
+            transformed = transformed.replace("katana ", f"katana {h_args} ")
+            if level >= 2:
+                transformed += " -rl 10 -c 5"
+            if level >= 3:
+                transformed += " -random-agent"
+
+        elif "dirsearch" in command:
+            h_args = " ".join([f'--header "{k}: {v}"' for k, v in headers.items()])
+            transformed = transformed.replace("dirsearch ", f"dirsearch {h_args} ")
+            if level >= 2:
+                transformed += " --random-agent -t 5 --delay 1"
+            if level >= 3:
+                transformed += " --random-agent -t 2 --delay 3"
+
+        elif "dalfox" in command:
+            h_args = " ".join([f'-H "{k}: {v}"' for k, v in headers.items()])
+            transformed = transformed.replace("dalfox ", f"dalfox {h_args} ")
+            if level >= 2:
+                transformed += " --delay 1000 -w 5"
+
+        elif "naabu" in command:
+            if level >= 2:
+                transformed += " -rate-limit 10 -c 5"
+            if level >= 3:
+                transformed += " -rate-limit 5 -c 2"
+
         elif "nikto" in command:
             # Nikto doesn't natively support -H for headers via CLI. We will just use evasion flags.
             evasion_mode = "1234" if level >= 2 else "1"
@@ -130,6 +179,10 @@ class WafGhostEngine:
         # Phase 2: Payload Mutation (Level 2+)
         if level >= 2:
             transformed = self._mutate_payloads(transformed, blocked_chars, level)
+
+        # Phase 3: Proxychains Injection (Level 2+)
+        if level >= 2 and not transformed.startswith("proxychains"):
+            transformed = f"proxychains4 -q {transformed}"
 
         if transformed != command:
             log.info(f"Ghost Protocol: Transformed {tool} command (Evasion Level {level}).")
