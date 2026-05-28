@@ -251,7 +251,7 @@ class ReconAgent(BaseAgent):
         
         # Track executed commands to avoid loops
         executed_commands = set()
-        max_recon_loops = rules.get("max_recon_loops", 3)
+        max_recon_loops = rules.get("max_recon_loops", 5)
         current_loop = 0
 
         # ── INITIAL PROBE ──
@@ -351,12 +351,18 @@ WAF: {fingerprint.get('waf_type') if fingerprint else 'None detected'}
 ### CURRENT FINDINGS
 {findings_summary}
 
-### MISSION
+### MISSION & PLAYBOOK
 You are the GHOSTWIRE V6 Recon Orchestrator, an intelligent, human-like bug bounty hunter. 
-Your goal is not just to run a checklist of tools, but to PIVOT based on your findings.
-Decide the NEXT 3-5 Linux shell commands to maximize discovery.
+Your goal is to follow a structured, professional recon methodology across multiple loops:
+1. DISCOVERY: Find subdomains (`subfinder`, etc.)
+2. PROBING: Probe discovered subdomains for live web servers (`httpx -u <subdomain>`, `curl -sI`).
+3. SCANNING: Port scan live targets (`nmap`, `masscan`).
+4. FINGERPRINTING: Identify tech stacks on live web servers (`whatweb`, `sslscan`).
+5. FUZZING: Directory fuzzing on interesting web roots (`ffuf`, `gobuster`).
+
+Decide the NEXT 3-5 Linux shell commands based on the CURRENT FINDINGS and the PLAYBOOK progression. Do NOT blindly skip to fuzzing if you haven't discovered live subdomains yet!
 Prefer tools like: nmap, masscan, subfinder, httpx, gobuster, nikto, nuclei, whatweb, sslscan, ffuf.
-DO NOT perform UDP scans (e.g. nmap -sU) as they are too slow and will timeout.
+DO NOT perform UDP scans (e.g. nmap -sU).
 
 ### PREVIOUSLY EXECUTED COMMANDS
 {chr(10).join(executed_commands) if executed_commands else "None"}
@@ -364,7 +370,7 @@ DO NOT perform UDP scans (e.g. nmap -sU) as they are too slow and will timeout.
 ### RULES
 - Return ONLY a JSON array of objects: [{{"command": "...", "reason": "...", "timeout": <integer_seconds>}}]
 - CRITICAL - Set a realistic timeout for each tool. Quick probes (curl/dig/httpx) = 60s. Heavy scanners = 900s.
-- PIVOTING - If you see subdomains in the findings, do NOT ignore them! Probe them (e.g., `httpx -u <subdomain>` or `curl -sI`). If you see a new open port, investigate it! Think like a hacker.
+- PIVOTING - You MUST feed findings from one step into the next! If subfinder found 5 subdomains, your next command MUST be `httpx` or `curl` to probe them. Think like a hacker.
 - CRITICAL - Target format by tool type:
   * HTTP tools (nikto, gobuster, ffuf, nuclei, whatweb, curl): use full URL -> {target}
   * Raw-socket / SSL tools (nmap, masscan, sslscan, dig, subfinder): use bare hostname -> {host}
