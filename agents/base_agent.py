@@ -1755,9 +1755,6 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
 
         if lower == "gobuster":
             if " dir " in command:
-                if "--wildcard" not in command:
-                    command = f"{command} --wildcard"
-                
                 # If wildcard is an error code, simply blacklist it
                 if st_rand in [403, 500, 503, 400]:
                     if "-b " in command:
