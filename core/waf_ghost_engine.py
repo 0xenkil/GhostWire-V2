@@ -122,12 +122,13 @@ class WafGhostEngine:
                 transformed = transformed.replace("gobuster vhost ", f"gobuster vhost {h_args} ")
             else:
                 transformed = transformed.replace("gobuster ", f"gobuster {h_args} ")
-            if level >= 2:
-                # Add jitter and delay for fuzzing
-                if "ffuf" in command: transformed += " -p 0.5-1.5 -t 10"
-                if "gobuster" in command: transformed += " --delay 1s --threads 5"
             if level >= 3:
-                if "ffuf" in command: transformed += " -H \"Connection: close\" -H \"Cache-Control: no-cache\""
+                if "ffuf" in command: transformed += " -p 1.5-3.0 -t 2 -H \"Connection: close\" -H \"Cache-Control: no-cache\""
+                if "gobuster" in command: transformed += " --delay 5s --threads 1"
+            elif level >= 2:
+                # Add jitter and delay for fuzzing
+                if "ffuf" in command: transformed += " -p 0.5-1.5 -t 5"
+                if "gobuster" in command: transformed += " --delay 2s --threads 2"
 
         elif "httpx" in command:
             h_args = " ".join([f'-H "{k}: {v}"' for k, v in headers.items()])
@@ -166,9 +167,16 @@ class WafGhostEngine:
                 transformed += " -rate-limit 5 -c 2"
 
         elif "nikto" in command:
-            # Nikto doesn't natively support -H for headers via CLI. We will just use evasion flags.
-            evasion_mode = "1234" if level >= 2 else "1"
-            transformed = transformed.replace("nikto ", f"nikto -evasion {evasion_mode} -Tuning 123a ")
+            # -evasion 1234 is heavily signatured and triggers instant WAF drops/tarpits.
+            # Using -evasion A (random string/agent) is much stealthier.
+            ua = headers.get("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+            transformed = transformed.replace("nikto ", f"nikto -useragent '{ua}' ")
+            if level >= 2:
+                transformed += " -evasion A -Tuning 123a"
+            if level >= 3:
+                # Nikto needs more time when running through WAFs
+                if "-maxtime 60" in transformed:
+                    transformed = transformed.replace("-maxtime 60", "-maxtime 180")
 
         elif "whatweb" in command:
             h_args = " ".join([f'--header "{k}: {v}"' for k, v in headers.items()])
@@ -330,8 +338,6 @@ except Exception as e:
                 return command.replace("wget ", f"wget --header='Cookie: {cookie_str}' ", 1)
             elif "sqlmap " in command:
                 return command + f" --cookie='{cookie_str}'"
-            elif "nikto " in command:
-                return command.replace("nikto ", f"nikto -H 'Cookie: {cookie_str}' ", 1)
             elif "ffuf " in command or "gobuster " in command:
                 tool_bin = command.split()[0]
                 return command.replace(tool_bin, f"{tool_bin} -H 'Cookie: {cookie_str}' ", 1)
