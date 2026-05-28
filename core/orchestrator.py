@@ -432,8 +432,13 @@ class Orchestrator:
 
                     async def run_agent_async():
                         try:
-                            # Run asynchronous agent directly
-                            res = await agent.run()
+                            # Support both sync and async agent.run() methods
+                            import inspect
+                            result_or_coro = agent.run()
+                            if inspect.isawaitable(result_or_coro):
+                                res = await result_or_coro
+                            else:
+                                res = result_or_coro
                             _agent_debug_log(
                                 "core/orchestrator.py:run_agent_complete",
                                 "Agent task completed",
