@@ -169,7 +169,7 @@ class WafGhostEngine:
         elif "nikto" in command:
             # -evasion 1234 is heavily signatured and triggers instant WAF drops/tarpits.
             # Using -evasion A (random string/agent) is much stealthier.
-            ua = headers.get("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+            ua = headers.get("User-Agent", self._user_agents[0])
             transformed = transformed.replace("nikto ", f"nikto -useragent '{ua}' ")
             if level >= 2:
                 transformed += " -evasion A -Tuning 123a"
