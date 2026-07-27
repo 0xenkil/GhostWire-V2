@@ -1,0 +1,116 @@
+{
+  "timestamp": "2026-05-08T11:51:15.429103",
+  "engagement_id": "eng_5b71abcc",
+  "changes": {
+    "tool_effectiveness": {
+      "tool_rates_adjusted": {
+        "nmap": {
+          "success_rate": 1.0,
+          "priority": 0.8,
+          "total_runs": 3,
+          "avg_duration": 125.13059655825298,
+          "recommendation": "highly_effective"
+        },
+        "gobuster": {
+          "success_rate": 0.0,
+          "priority": 0.0,
+          "total_runs": 2,
+          "avg_duration": 0.1806274652481079,
+          "recommendation": "never_works"
+        },
+        "sqlmap": {
+          "success_rate": 0.6666666666666666,
+          "priority": 0.6666666666666666,
+          "total_runs": 3,
+          "avg_duration": 5.069471995035808,
+          "recommendation": "moderate"
+        },
+        "dirb": {
+          "success_rate": 0.0,
+          "priority": 0.0,
+          "total_runs": 3,
+          "avg_duration": 0.6391870180765787,
+          "recommendation": "never_works"
+        },
+        "subfinder": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 2,
+          "avg_duration": 14.320690155029297,
+          "recommendation": "highly_effective"
+        },
+        "dig": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 4,
+          "avg_duration": 0.21267598867416382,
+          "recommendation": "highly_effective"
+        }
+      },
+      "tool_order_changed": false,
+      "reasoning": [
+        "Tool 'nmap' highly effective (100% success) - prioritize",
+        "Tool 'dirb' has 0% success rate after 3 runs - consider removing",
+        "Tool 'subfinder' highly effective (100% success) - prioritize",
+        "Tool 'dig' highly effective (100% success) - prioritize"
+      ]
+    },
+    "finding_confidence": {
+      "confidence_adjustments": {},
+      "high_confidence_techs": [],
+      "reasoning": []
+    },
+    "timeouts": {
+      "timeout_adjustments": {},
+      "reasoning": []
+    },
+    "waf_handling": {
+      "waf_rules": {
+        "generic_waf": {
+          "tools_to_avoid": [],
+          "tools_to_use": [
+            "dig",
+            "nmap",
+            "whatweb",
+            "subfinder",
+            "nikto",
+            "sqlmap"
+          ],
+          "recommended_order": [
+            "dig",
+            "nmap",
+            "subfinder",
+            "sqlmap",
+            "whatweb",
+            "nikto"
+          ],
+          "top_evasion_vectors": []
+        }
+      },
+      "blocked_tools": {},
+      "effective_tools": {},
+      "evasion_priorities": {},
+      "reasoning": [
+        "Against generic_waf, use: dig, nmap, whatweb"
+      ]
+    }
+  },
+  "recommendations": [
+    {
+      "type": "waf_defense_policy",
+      "waf": "generic_waf",
+      "tools_to_avoid": [],
+      "priority": "high",
+      "reasoning": "generic_waf detected - keep validation low-rate, record block evidence, and stop commands that trigger WAF/rate-limit/CAPTCHA responses"
+    },
+    {
+      "type": "skip_ineffective_tools",
+      "tools": [
+        "dirb"
+      ],
+      "priority": "medium",
+      "reasoning": "Tools ['dirb'] never succeeded - consider skipping on similar targets"
+    }
+  ],
+  "rollback_data": {}
+}

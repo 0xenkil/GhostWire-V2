@@ -1,0 +1,76 @@
+{
+  "timestamp": "2026-05-28T15:47:55.791474",
+  "engagement_id": "eng_c7195397",
+  "changes": {
+    "tool_effectiveness": {
+      "tool_rates_adjusted": {
+        "dig": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 4,
+          "avg_duration": 0.30764085054397583,
+          "recommendation": "highly_effective"
+        },
+        "subfinder": {
+          "success_rate": 0.3333333333333333,
+          "priority": 0.3333333333333333,
+          "total_runs": 3,
+          "avg_duration": 24.410287141799927,
+          "recommendation": "unreliable"
+        }
+      },
+      "tool_order_changed": false,
+      "reasoning": [
+        "Tool 'dig' highly effective (100% success) - prioritize"
+      ]
+    },
+    "finding_confidence": {
+      "confidence_adjustments": {},
+      "high_confidence_techs": [],
+      "reasoning": []
+    },
+    "timeouts": {
+      "timeout_adjustments": {},
+      "reasoning": []
+    },
+    "waf_handling": {
+      "waf_rules": {
+        "generic_waf": {
+          "tools_to_avoid": [],
+          "tools_to_use": [
+            "curl",
+            "dig",
+            "gobuster",
+            "subfinder"
+          ],
+          "recommended_order": [
+            "dig",
+            "curl",
+            "gobuster",
+            "subfinder"
+          ]
+        }
+      },
+      "blocked_tools": {},
+      "effective_tools": {},
+      "reasoning": [
+        "Against generic_waf, use: curl, dig, gobuster"
+      ]
+    }
+  },
+  "recommendations": [
+    {
+      "type": "waf_bypass_strategy",
+      "waf": "generic_waf",
+      "tools_to_use": [
+        "dig",
+        "curl",
+        "gobuster"
+      ],
+      "tools_to_avoid": [],
+      "priority": "high",
+      "reasoning": "Against generic_waf, prioritize dig, curl, gobuster"
+    }
+  ],
+  "rollback_data": {}
+}

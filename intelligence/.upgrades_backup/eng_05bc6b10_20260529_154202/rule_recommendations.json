@@ -1,0 +1,33 @@
+[
+  {
+    "type": "waf_bypass_strategy",
+    "waf": "generic_waf",
+    "tools_to_use": [
+      "httpx",
+      "sslscan",
+      "subfinder",
+      "nikto",
+      "curl",
+      "dig",
+      "nmap"
+    ],
+    "tools_to_avoid": [
+      "ffuf"
+    ],
+    "priority": "high",
+    "reasoning": "Against generic_waf, prioritize httpx, sslscan, subfinder, nikto, curl, dig, nmap"
+  },
+  {
+    "type": "skip_ineffective_tools",
+    "tools": [
+      "whatweb",
+      "gobuster",
+      "masscan",
+      "hydra",
+      "nuclei",
+      "ffuf"
+    ],
+    "priority": "medium",
+    "reasoning": "Tools ['whatweb', 'gobuster', 'masscan', 'hydra', 'nuclei', 'ffuf'] never succeeded - consider skipping on similar targets"
+  }
+]

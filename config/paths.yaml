@@ -1,0 +1,120 @@
+directories:
+  rules: "rules"
+  results: "results"
+  tools: "tools"
+  intelligence: "intelligence"
+  utils: "utils"
+  scratch: "scratch"
+  logs: "results/logs"
+  report: "results/report"
+
+files:
+  tool_metrics: "results/tool_metrics.json"
+  waf_database: "intelligence/waf_database.json"
+  findings: "results/report/findings.json"
+  health_summary: "results/report/health_summary.json"
+  emergency_results: "results/report/emergency_results.json"
+  main_log: "results/logs/ghostwire.log"
+  error_log: "results/logs/errors.log"
+  debug_log: "results/logs/debug.log"
+
+rule_files:
+  exploitation: "rules/exploitation.json"
+  infrastructure: "rules/infrastructure.json"
+  recon: "rules/recon.json"
+  weaponization: "rules/weaponization.json"
+
+wordlists:
+  local:
+    common:
+      - "/usr/share/dirb/wordlists/common.txt"
+      - "/usr/share/seclists/Discovery/Web-Content/common.txt"
+      - "/tmp/wordlist_common.txt"
+      - "./wordlists/common.txt"
+    directory:
+      - "/usr/share/wordlists/dirbuster/directory-list-2.3-small.txt"
+      - "/usr/share/seclists/Discovery/Web-Content/directory-list-2.3-small.txt"
+      - "/tmp/directory-list-2.3-small.txt"
+      - "./wordlists/directory-list-2.3-small.txt"
+    passwords:
+      - "/usr/share/wordlists/rockyou.txt"
+      - "/usr/share/wordlists/rockyou.txt.gz"
+      - "/tmp/rockyou.txt"
+      - "./wordlists/rockyou.txt"
+  vps:
+    common:
+      - "/usr/share/dirb/wordlists/common.txt"
+      - "/usr/share/seclists/Discovery/Web-Content/common.txt"
+      - "/usr/share/wordlists/dirbuster/directory-list-2.3-small.txt"
+      - "/opt/SecLists/Discovery/Web-Content/common.txt"
+      - "~/redteam-workspace/ai_wordlist.txt"
+    directory:
+      - "/usr/share/wordlists/dirbuster/directory-list-2.3-small.txt"
+      - "/usr/share/seclists/Discovery/Web-Content/directory-list-2.3-small.txt"
+      - "/usr/share/dirb/wordlists/common.txt"
+      - "/opt/SecLists/Discovery/Web-Content/directory-list-2.3-small.txt"
+      - "~/redteam-workspace/ai_wordlist.txt"
+    passwords:
+      - "/usr/share/wordlists/rockyou.txt"
+      - "/usr/share/wordlists/rockyou.txt.gz"
+      - "/opt/SecLists/Passwords/Common-Credentials/10-million-password-list-top-1000.txt"
+      - "~/redteam-workspace/ai_wordlist.txt"
+    subdomains:
+      - "/usr/share/seclists/Discovery/DNS/subdomains-top1million-5000.txt"
+      - "/opt/SecLists/Discovery/DNS/subdomains-top1million-5000.txt"
+      - "/usr/share/wordlists/dnsmap.txt"
+      - "~/redteam-workspace/ai_wordlist.txt"
+    usernames:
+      - "/usr/share/seclists/Usernames/top-usernames-shortlist.txt"
+      - "/opt/SecLists/Usernames/top-usernames-shortlist.txt"
+      - "~/redteam-workspace/ai_wordlist.txt"
+  wsl:
+    common:
+      - "/usr/share/dirb/wordlists/common.txt"
+      - "/usr/share/seclists/Discovery/Web-Content/common.txt"
+      - "/usr/share/wordlists/dirbuster/directory-list-2.3-small.txt"
+      - "/opt/SecLists/Discovery/Web-Content/common.txt"
+      - "~/redteam-workspace/ai_wordlist.txt"
+    directory:
+      - "/usr/share/wordlists/dirbuster/directory-list-2.3-small.txt"
+      - "/usr/share/seclists/Discovery/Web-Content/directory-list-2.3-small.txt"
+      - "/usr/share/dirb/wordlists/common.txt"
+      - "/opt/SecLists/Discovery/Web-Content/directory-list-2.3-small.txt"
+      - "~/redteam-workspace/ai_wordlist.txt"
+    passwords:
+      - "/usr/share/wordlists/rockyou.txt"
+      - "/usr/share/wordlists/rockyou.txt.gz"
+      - "/opt/SecLists/Passwords/Common-Credentials/10-million-password-list-top-1000.txt"
+      - "~/redteam-workspace/ai_wordlist.txt"
+    subdomains:
+      - "/usr/share/seclists/Discovery/DNS/subdomains-top1million-5000.txt"
+      - "/opt/SecLists/Discovery/DNS/subdomains-top1million-5000.txt"
+      - "/usr/share/wordlists/dnsmap.txt"
+      - "~/redteam-workspace/ai_wordlist.txt"
+    usernames:
+      - "/usr/share/seclists/Usernames/top-usernames-shortlist.txt"
+      - "/opt/SecLists/Usernames/top-usernames-shortlist.txt"
+      - "~/redteam-workspace/ai_wordlist.txt"
+
+vps_settings:
+  tool_path: "$HOME/.local/bin:/root/.local/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/root/theHarvester"
+  temp_dir: "~/redteam-workspace"
+  results_dir: "~/redteam-workspace/results"
+
+wsl_settings:
+  tool_path: "$HOME/.local/bin:/root/.local/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/root/theHarvester"
+  temp_dir: "~/redteam-workspace"
+  results_dir: "~/redteam-workspace/results"
+
+system_paths:
+  tor_config: "/etc/tor/torrc"
+  proxychains_config: "/etc/proxychains4.conf"
+  temp_poc_dir: "/tmp"
+  temp_script_dir: "/tmp"
+
+wordlist_urls:
+  common: "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/common.txt"
+  directory: "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/raft-small-directories.txt"
+  subdomains: "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/DNS/subdomains-top1million-5000.txt"
+  passwords: "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Passwords/Common-Credentials/10-million-password-list-top-1000.txt"
+  usernames: "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Usernames/top-usernames-shortlist.txt"

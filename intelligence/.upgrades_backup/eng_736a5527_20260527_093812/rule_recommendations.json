@@ -1,0 +1,26 @@
+[
+  {
+    "type": "waf_bypass_strategy",
+    "waf": "generic_waf",
+    "tools_to_use": [
+      "dig",
+      "curl",
+      "nmap",
+      "subfinder",
+      "sslscan"
+    ],
+    "tools_to_avoid": [
+      "gobuster"
+    ],
+    "priority": "high",
+    "reasoning": "Against generic_waf, prioritize dig, curl, nmap, subfinder, sslscan"
+  },
+  {
+    "type": "skip_ineffective_tools",
+    "tools": [
+      "gobuster"
+    ],
+    "priority": "medium",
+    "reasoning": "Tools ['gobuster'] never succeeded - consider skipping on similar targets"
+  }
+]

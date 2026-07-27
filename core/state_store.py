@@ -2,29 +2,44 @@ import sqlite3
 import json
 import threading
 import queue
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from config_thresholds import DB_TIMEOUT
+from config_thresholds import DB_CONNECTION_TIMEOUT as DB_TIMEOUT
 from utils.logger import get_logger
 
 log = get_logger("state_store")
+
 
 class StateStore:
     def __init__(self, db_path):
         if str(db_path) != ":memory:":
             db_path = Path(db_path)
             db_path.parent.mkdir(parents=True, exist_ok=True)
-        self.db_path = db_path
-        
-        self.conn = sqlite3.connect(str(db_path), check_same_thread=False, timeout=DB_TIMEOUT)
+            self.db_path = str(db_path)
+            self.conn = sqlite3.connect(
+                self.db_path,
+                check_same_thread=False,
+                timeout=DB_TIMEOUT,
+                isolation_level=None)
+        else:
+            self.db_path = "file::memory:?cache=shared"
+            self.conn = sqlite3.connect(
+                self.db_path,
+                check_same_thread=False,
+                timeout=DB_TIMEOUT,
+                uri=True,
+                isolation_level=None)
+
         self.conn.execute("PRAGMA journal_mode=WAL")
-        
+
         # Setup background writer thread
         self.write_queue = queue.Queue()
-        self.writer_thread = threading.Thread(target=self._writer_loop, daemon=True)
+        self.writer_thread = threading.Thread(
+            target=self._writer_loop, daemon=True)
         self.writer_thread.start()
-        
-        # FIX #3.5: Thread safety - initialization event to prevent access before schema is ready
+
+        # FIX #3.5: Thread safety - initialization event to prevent access
+        # before schema is ready
         self._initialized = threading.Event()
         self._init_schema()
 
@@ -37,17 +52,23 @@ class StateStore:
     def __del__(self):
         try:
             self.close()
-        except Exception:
-            pass
+        except Exception as _e:
+            import logging
+            logging.getLogger(__name__).warning(
+                f"Failed to close state store: {_e}")
 
     def _wait_for_init(self, timeout: int = 30):
         """FIX #3.5: Wait for database initialization before proceeding."""
         if not self._initialized.wait(timeout=timeout):
-            log.error(f"[FIX 3.5] StateStore initialization timeout after {timeout}s")
-            raise RuntimeError("StateStore initialization timeout - database schema not ready")
+            log.error(
+                f"[FIX 3.5] StateStore initialization timeout after {timeout}s")
+            raise RuntimeError(
+                "StateStore initialization timeout - database schema not ready")
 
     def _writer_loop(self):
-        write_conn = sqlite3.connect(str(self.db_path), check_same_thread=False, timeout=DB_TIMEOUT)
+        is_uri = str(self.db_path).startswith("file:")
+        write_conn = sqlite3.connect(
+            str(self.db_path), check_same_thread=False, timeout=DB_TIMEOUT, uri=is_uri)
         write_conn.execute("PRAGMA journal_mode=WAL")
         while True:
             try:
@@ -83,7 +104,8 @@ class StateStore:
             'error': None
         }
         self.write_queue.put(task)
-        task['event'].wait()
+        if not task['event'].wait(timeout=10.0):
+            raise RuntimeError("State store write operation timed out")
         if task['error']:
             raise task['error']
 
@@ -96,7 +118,13 @@ class StateStore:
                 status TEXT DEFAULT 'pending',
                 started_at TEXT,
                 finished_at TEXT,
-                summary TEXT
+                summary TEXT,
+                -- Without this, `INSERT OR REPLACE INTO phases` (set_phase_status)
+                -- has no unique key to conflict on (id is autoincrement), so every
+                -- status update INSERTS A DUPLICATE ROW instead of updating, and
+                -- get_phase_status (no ORDER BY) then returns a stale row. Mirror
+                -- the phase_data PRIMARY KEY(engagement_id, phase).
+                UNIQUE(engagement_id, phase)
             );
             CREATE TABLE IF NOT EXISTS tool_runs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -151,7 +179,8 @@ class StateStore:
                 avoid_next TEXT,
                 retry_count INTEGER DEFAULT 0,
                 first_seen TEXT,
-                last_seen TEXT
+                last_seen TEXT,
+                UNIQUE(engagement_id, agent_id, tool, error_type)
             );
             CREATE TABLE IF NOT EXISTS evidence_graph (
                 engagement_id TEXT NOT NULL,
@@ -186,26 +215,36 @@ class StateStore:
                 tactics TEXT,
                 last_updated TEXT
             );
+            CREATE TABLE IF NOT EXISTS credentials (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                engagement_id TEXT NOT NULL,
+                target TEXT,
+                service TEXT,
+                username TEXT,
+                password TEXT,
+                auth_type TEXT,
+                source_tool TEXT,
+                timestamp TEXT,
+                UNIQUE(engagement_id, target, service, username, password)
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_failure_patterns_unique ON failure_patterns(engagement_id, agent_id, tool, error_type);
         """, is_script=True)
         self._initialized.set()
 
-    def set_phase_status(self, engagement_id: str, phase: str, status: str, summary: str = ""):
+    def set_phase_status(self, engagement_id: str,
+                         phase: str, status: str, summary: str = ""):
         self._wait_for_init()
-        now = datetime.utcnow().isoformat()
-        existing = self.conn.execute(
-            "SELECT id FROM phases WHERE engagement_id=? AND phase=?",
-            (engagement_id, phase)
-        ).fetchone()
-        if existing:
-            self._submit_write(
-                ("UPDATE phases SET status=?, finished_at=?, summary=? WHERE engagement_id=? AND phase=?",
-                 (status, now, summary, engagement_id, phase))
-            )
-        else:
-            self._submit_write(
-                ("INSERT INTO phases (engagement_id, phase, status, started_at, summary) VALUES (?,?,?,?,?)",
-                 (engagement_id, phase, status, now, summary))
-            )
+        now = datetime.now(timezone.utc).isoformat()
+
+        # FIX P0-4: Convert SELECT-then-INSERT/UPDATE to INSERT OR REPLACE to
+        # prevent race conditions
+        self._submit_write(
+            ("""INSERT OR REPLACE INTO phases (engagement_id, phase, status, started_at, finished_at, summary)
+                VALUES (?, ?, ?,
+                        COALESCE((SELECT started_at FROM phases WHERE engagement_id=? AND phase=?), ?),
+                        ?, ?)""",
+             (engagement_id, phase, status, engagement_id, phase, now, now if status != 'pending' else None, summary))
+        )
 
     def log_tool_run(self, engagement_id: str, phase: str, tool: str,
                      command: str, status: str, stdout: str, stderr: str,
@@ -216,20 +255,20 @@ class StateStore:
                (engagement_id, phase, tool, command, status, stdout, stderr, exit_code, duration_sec, evasion_applied, timestamp)
                VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
              (engagement_id, phase, tool, command, status,
-              stdout[:50000], stderr[:10000], exit_code, duration, evasion_applied,
-              datetime.utcnow().isoformat()))
+              (stdout or "")[:50000], (stderr or "")[:10000], exit_code, duration, evasion_applied,
+              datetime.now(timezone.utc).isoformat()))
         )
 
     def get_tool_runs(self, engagement_id: str) -> list:
         self._wait_for_init()
         rows = self.conn.execute(
-            """SELECT phase, tool, command, status, stdout, stderr, exit_code, duration_sec, evasion_applied, timestamp 
+            """SELECT phase, tool, command, status, stdout, stderr, exit_code, duration_sec, evasion_applied, timestamp
                FROM tool_runs WHERE engagement_id=? ORDER BY timestamp""",
             (engagement_id,)
         ).fetchall()
         return [
-            dict(phase=r[0], tool=r[1], command=r[2], status=r[3], 
-                 stdout=r[4], stderr=r[5], exit_code=r[6], 
+            dict(phase=r[0], tool=r[1], command=r[2], status=r[3],
+                 stdout=r[4], stderr=r[5], exit_code=r[6],
                  duration=r[7], evasion_applied=r[8], timestamp=r[9])
             for r in rows
         ]
@@ -237,9 +276,16 @@ class StateStore:
     def add_finding(self, engagement_id: str, phase: str, finding_type: str,
                     target: str, detail: str, severity: str = "info", agent_id: str = "unknown"):
         if not detail or not str(detail).strip():
-            log.warning(f"Dropping malformed finding: empty detail for {finding_type} on {target}")
+            log.warning(
+                f"Dropping malformed finding: empty detail for {finding_type} on {target}")
             return
         detail = str(detail).strip()
+
+        # Enforce severity whitelist
+        severity = str(severity).strip().lower()
+        if severity not in {"info", "low", "medium", "high", "critical"}:
+            severity = "info"
+
         self._wait_for_init()
         detail_key = detail[:120]
         existing = self.conn.execute(
@@ -249,14 +295,15 @@ class StateStore:
             (engagement_id, finding_type, target, detail_key)
         ).fetchone()
         if existing:
-            log.debug(f"DB dedup: skipping duplicate finding [{finding_type}] {detail_key[:50]}")
+            log.debug(
+                f"DB dedup: skipping duplicate finding [{finding_type}] {detail_key[:50]}")
             return
         self._submit_write(
             ("""INSERT OR IGNORE INTO findings
                (engagement_id, agent_id, phase, finding_type, target, detail, severity, timestamp)
                VALUES (?,?,?,?,?,?,?,?)""",
              (engagement_id, agent_id, phase, finding_type, target, detail, severity,
-              datetime.utcnow().isoformat()))
+              datetime.now(timezone.utc).isoformat()))
         )
 
     def get_all_findings(self, engagement_id: str) -> list:
@@ -265,13 +312,20 @@ class StateStore:
             "SELECT phase, finding_type, target, detail, severity, timestamp FROM findings WHERE engagement_id=? ORDER BY timestamp",
             (engagement_id,)
         ).fetchall()
-        
+
         valid_findings = []
         for r in rows:
             detail = r[3]
             if not detail or not isinstance(detail, str) or not detail.strip():
                 continue
-            valid_findings.append(dict(phase=r[0], type=r[1], target=r[2], detail=detail.strip(), severity=r[4], timestamp=r[5]))
+            valid_findings.append(
+                dict(
+                    phase=r[0],
+                    type=r[1],
+                    target=r[2],
+                    detail=detail.strip(),
+                    severity=r[4],
+                    timestamp=r[5]))
         return valid_findings
 
     def has_findings(self, engagement_id: str, phase: str) -> bool:
@@ -282,86 +336,111 @@ class StateStore:
         ).fetchone()
         return bool(row)
 
-    def log_message(self, engagement_id: str, from_agent: str, to_agent: str, content: str):
+    def log_message(self, engagement_id: str, from_agent: str,
+                    to_agent: str, content: str):
         self._wait_for_init()
         self._submit_write(
             ("INSERT INTO messages (engagement_id, from_agent, to_agent, content, timestamp) VALUES (?,?,?,?,?)",
-             (engagement_id, from_agent, to_agent, content, datetime.utcnow().isoformat()))
+             (engagement_id, from_agent, to_agent, content, datetime.now(timezone.utc).isoformat()))
         )
 
     def set_phase_data(self, engagement_id: str, phase: str, data: dict):
         self._wait_for_init()
-        
+
         if not isinstance(data, dict):
-            log.error(f"[VALIDATION] set_phase_data({engagement_id}, {phase}): Expected dict, got {type(data).__name__}")
-            raise TypeError(f"State data must be dict, got {type(data).__name__}")
-        
+            log.error(
+                f"[VALIDATION] set_phase_data({engagement_id}, {phase}): Expected dict, got {
+                    type(data).__name__}")
+            raise TypeError(
+                f"State data must be dict, got {
+                    type(data).__name__}")
+
         if not engagement_id or not phase:
-            log.error(f"[VALIDATION] set_phase_data: engagement_id or phase is empty")
-            raise ValueError(f"engagement_id and phase must not be empty")
-        
+            log.error(
+                "[VALIDATION] set_phase_data: engagement_id or phase is empty")
+            raise ValueError("engagement_id and phase must not be empty")
+
         if not data:
-            log.warning(f"[VALIDATION] set_phase_data({engagement_id}, {phase}): Storing empty dict")
-        
+            log.warning(
+                f"[VALIDATION] set_phase_data({engagement_id}, {phase}): Storing empty dict")
+
         row = self.conn.execute(
             "SELECT data FROM phase_data WHERE engagement_id=? AND phase=?",
             (engagement_id, phase)
         ).fetchone()
-        
+
         merged_data = data
         if row:
             try:
                 existing = json.loads(row[0])
                 if isinstance(existing, dict) and isinstance(data, dict):
-                    merged_data = {**existing, **data}
+                    merged_data = {}
+                    for k in set(existing.keys()) | set(data.keys()):
+                        if k in data:
+                            if data[k] is None and k in existing and existing[k] is not None:
+                                merged_data[k] = existing[k]
+                            else:
+                                merged_data[k] = data[k]
+                        else:
+                            merged_data[k] = existing[k]
             except Exception as e:
-                log.warning(f"[VALIDATION] Failed to merge existing phase data: {e}, using new data only")
+                log.warning(
+                    f"[VALIDATION] Failed to merge existing phase data: {e}, using new data only")
 
         try:
             serialized = json.dumps(merged_data, default=str)
         except Exception as e:
             log.error(f"[VALIDATION] Failed to serialize phase data: {e}")
             raise ValueError(f"State data is not JSON-serializable: {e}")
-        
+
         self._submit_write(
             ("INSERT OR REPLACE INTO phase_data (engagement_id, phase, data) VALUES (?, ?, ?)",
              (engagement_id, phase, serialized))
         )
-        log.debug(f"[VALIDATION] Stored phase data: {engagement_id}:{phase} ({len(serialized)} bytes)")
+        log.debug(
+            f"[VALIDATION] Stored phase data: {engagement_id}:{phase} ({
+                len(serialized)} bytes)")
 
     def get_phase_data(self, engagement_id: str, phase: str) -> dict | None:
         self._wait_for_init()
-        
+
         if not engagement_id or not phase:
-            log.error(f"[VALIDATION] get_phase_data: engagement_id or phase is empty")
+            log.error(
+                "[VALIDATION] get_phase_data: engagement_id or phase is empty")
             return None
-        
+
         row = self.conn.execute(
             "SELECT data FROM phase_data WHERE engagement_id=? AND phase=?",
             (engagement_id, phase)
         ).fetchone()
-        
+
         if row is None:
-            log.debug(f"[VALIDATION] No data found for {engagement_id}:{phase}")
+            log.debug(
+                f"[VALIDATION] No data found for {engagement_id}:{phase}")
             return None
-        
+
         try:
             data = json.loads(row[0])
-            
+
             if not isinstance(data, dict):
-                log.error(f"[VALIDATION] Phase data corrupted for {engagement_id}:{phase}: got {type(data).__name__} instead of dict")
+                log.error(
+                    f"[VALIDATION] Phase data corrupted for {engagement_id}:{phase}: got {
+                        type(data).__name__} instead of dict")
                 return None
-            
+
             if not data:
-                log.warning(f"[VALIDATION] Phase data for {engagement_id}:{phase} is empty dict")
-            
+                log.warning(
+                    f"[VALIDATION] Phase data for {engagement_id}:{phase} is empty dict")
+
             return data
-            
+
         except json.JSONDecodeError as e:
-            log.error(f"[VALIDATION] Failed to parse phase data JSON for {engagement_id}:{phase}: {e}")
+            log.error(
+                f"[VALIDATION] Failed to parse phase data JSON for {engagement_id}:{phase}: {e}")
             return None
         except Exception as e:
-            log.error(f"[VALIDATION] Unexpected error reading phase data for {engagement_id}:{phase}: {e}")
+            log.error(
+                f"[VALIDATION] Unexpected error reading phase data for {engagement_id}:{phase}: {e}")
             return None
 
     def get_phase_status(self, engagement_id: str, phase: str) -> str | None:
@@ -380,11 +459,12 @@ class StateStore:
         ).fetchall()
         return {r[0]: {"status": r[1], "summary": r[2]} for r in rows}
 
-    def check_negative_outcome(self, engagement_id: str, target: str, tool: str) -> bool:
+    def check_negative_outcome(
+            self, engagement_id: str, target: str, tool: str) -> bool:
         self._wait_for_init()
         row = self.conn.execute(
-            """SELECT 1 FROM findings 
-               WHERE engagement_id=? AND target=? 
+            """SELECT 1 FROM findings
+               WHERE engagement_id=? AND target=?
                AND finding_type='negative_outcome'
                AND detail LIKE ? LIMIT 1""",
             (engagement_id, target, f"%[{tool}]%")
@@ -392,44 +472,36 @@ class StateStore:
         return bool(row)
 
     def record_failure_pattern(self, engagement_id: str, agent_id: str, tool: str = None,
-                              error_type: str = None, command: str = None, stderr: str = None,
-                              root_cause: str = None, severity: str = "warning",
-                              avoid_next: str = None):
+                               error_type: str = None, command: str = None, stderr: str = None,
+                               root_cause: str = None, severity: str = "warning",
+                               avoid_next: str = None):
         self._wait_for_init()
-        now = datetime.utcnow().isoformat()
-        existing = self.conn.execute(
-            """SELECT id, retry_count FROM failure_patterns
-               WHERE engagement_id=? AND agent_id=? AND tool=? AND error_type=?
-               LIMIT 1""",
-            (engagement_id, agent_id, tool, error_type)
-        ).fetchone()
-        
-        if existing:
-            pattern_id, retry_count = existing
-            self._submit_write(
-                ("""UPDATE failure_patterns 
-                   SET retry_count=?, last_seen=?, stderr=?, root_cause=?
-                   WHERE id=?""",
-                 (retry_count + 1, now, stderr[:1000] if stderr else None,
-                  root_cause, pattern_id))
-            )
-        else:
-            self._submit_write(
-                ("""INSERT INTO failure_patterns
-                   (engagement_id, agent_id, tool, error_type, command, stderr, 
-                    root_cause, severity, avoid_next, first_seen, last_seen)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-                 (engagement_id, agent_id, tool, error_type,
-                  command[:500] if command else None,
-                  stderr[:1000] if stderr else None,
-                  root_cause, severity, avoid_next, now, now))
-            )
+        now = datetime.now(timezone.utc).isoformat()
 
-    def get_failure_patterns(self, engagement_id: str, agent_id: str = None) -> list:
+        # Convert to INSERT OR REPLACE or UPSERT (SQLite 3.24+) to avoid race
+        # condition
+        self._submit_write(
+            ("""INSERT INTO failure_patterns
+                (engagement_id, agent_id, tool, error_type, command, stderr, root_cause, severity, avoid_next, first_seen, last_seen, retry_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                ON CONFLICT(engagement_id, agent_id, tool, error_type) DO UPDATE SET
+                retry_count = retry_count + 1,
+                last_seen = excluded.last_seen,
+                stderr = excluded.stderr,
+                root_cause = excluded.root_cause
+             """,
+             (engagement_id, agent_id, tool, error_type,
+              command[:500] if command else None,
+              stderr[:1000] if stderr else None,
+              root_cause, severity, avoid_next, now, now))
+        )
+
+    def get_failure_patterns(self, engagement_id: str,
+                             agent_id: str = None) -> list:
         self._wait_for_init()
         if agent_id:
             rows = self.conn.execute(
-                """SELECT agent_id, tool, error_type, root_cause, severity, 
+                """SELECT agent_id, tool, error_type, root_cause, severity,
                           avoid_next, retry_count, last_seen
                    FROM failure_patterns
                    WHERE engagement_id=? AND agent_id=?
@@ -445,26 +517,41 @@ class StateStore:
                    ORDER BY last_seen DESC LIMIT 100""",
                 (engagement_id,)
             ).fetchall()
-        
+
         return [dict(agent=r[0], tool=r[1], error_type=r[2], root_cause=r[3],
-                    severity=r[4], avoid_next=r[5], retry_count=r[6], last_seen=r[7])
+                     severity=r[4], avoid_next=r[5], retry_count=r[6], last_seen=r[7])
                 for r in rows]
 
-    def save_global_data(self, key: str, data: dict):
-        self.set_phase_data("global", key, data)
+    def save_global_data(self, key: str, data: dict,
+                         engagement_id: str = "global"):
+        self.set_phase_data(engagement_id, key, data)
 
-    def get_global_data(self, key: str) -> dict | None:
-        return self.get_phase_data("global", key)
+    def get_global_data(self, key: str,
+                        engagement_id: str = "global") -> dict | None:
+        return self.get_phase_data(engagement_id, key)
 
     def set(self, key: str, value: str):
-        self.save_global_data(key, {"value": value})
+        if ":" in key:
+            engagement_id, real_key = key.split(":", 1)
+            self.save_global_data(real_key, {"value": value}, engagement_id)
+        else:
+            self.save_global_data(key, {"value": value})
 
     def get(self, key: str) -> str | None:
-        data = self.get_global_data(key)
+        if ":" in key:
+            engagement_id, real_key = key.split(":", 1)
+            data = self.get_global_data(real_key, engagement_id)
+        else:
+            data = self.get_global_data(key)
         return data.get("value") if data else None
 
     def get_config(self, key: str) -> dict | None:
-        config_path = Path(__file__).parent.parent / "rules" / f"{key}.json"
+        import re
+        safe_key = re.sub(r'[^A-Za-z0-9_-]', '', key)[:64]
+        if not safe_key:
+            return None
+        config_path = Path(__file__).parent.parent / \
+            "rules" / f"{safe_key}.json"
         if not config_path.exists():
             log.warning(f"Config file not found: {config_path}")
             return None
@@ -477,11 +564,11 @@ class StateStore:
 
     def store_evidence_graph(self, engagement_id: str, nodes: list[dict]):
         self._wait_for_init()
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         writes = []
         for node in nodes:
             ntype = str(node.get("node_type", "unknown"))
-            nkey  = str(node.get("node_key",  "unknown"))
+            nkey = str(node.get("node_key", "unknown"))
             attrs = json.dumps(node.get("attributes", {}), default=str)
             writes.append(
                 ("INSERT OR REPLACE INTO evidence_graph (engagement_id, node_type, node_key, attributes, updated_at) VALUES (?,?,?,?,?)",
@@ -490,7 +577,8 @@ class StateStore:
         if writes:
             self._submit_write(writes)
 
-    def get_evidence_graph(self, engagement_id: str, node_type: str | None = None) -> list[dict]:
+    def get_evidence_graph(self, engagement_id: str,
+                           node_type: str | None = None) -> list[dict]:
         self._wait_for_init()
         if node_type:
             rows = self.conn.execute(
@@ -513,13 +601,16 @@ class StateStore:
             try:
                 attrs = json.loads(r[2]) if r[2] else {}
             except Exception as e:
-                log.error(f"Failed to parse attributes for evidence graph node {r[1]}: {e}", exc_info=True)
+                log.error(
+                    f"Failed to parse attributes for evidence graph node {
+                        r[1]}: {e}", exc_info=True)
                 attrs = {}
             result.append(dict(node_type=r[0], node_key=r[1],
                                attributes=attrs, updated_at=r[3]))
         return result
 
-    def add_graph_node(self, engagement_id: str, key: str, node_type: str, attributes: dict):
+    def add_graph_node(self, engagement_id: str, key: str,
+                       node_type: str, attributes: dict):
         self._wait_for_init()
         attrs = json.dumps(attributes, default=str)
         self._submit_write(
@@ -528,7 +619,8 @@ class StateStore:
              (engagement_id, key, node_type, attrs))
         )
 
-    def add_graph_edge(self, engagement_id: str, source: str, target: str, rel_type: str):
+    def add_graph_edge(self, engagement_id: str, source: str,
+                       target: str, rel_type: str):
         self._wait_for_init()
         self._submit_write(
             ("""INSERT OR IGNORE INTO graph_edges (engagement_id, source, target, rel_type)
@@ -546,12 +638,15 @@ class StateStore:
             try:
                 attrs = json.loads(row[1]) if row[1] else {}
             except Exception as e:
-                log.error(f"Failed to parse attributes for graph node {key}: {e}", exc_info=True)
+                log.error(
+                    f"Failed to parse attributes for graph node {key}: {e}",
+                    exc_info=True)
                 attrs = {}
             return {"key": key, "type": row[0], "attributes": attrs}
         return None
 
-    def get_graph_neighbors(self, engagement_id: str, node_key: str) -> list[tuple[str, str]]:
+    def get_graph_neighbors(self, engagement_id: str,
+                            node_key: str) -> list[tuple[str, str]]:
         self._wait_for_init()
         rows = self.conn.execute(
             """SELECT target, rel_type FROM graph_edges WHERE engagement_id=? AND source=?
@@ -561,7 +656,8 @@ class StateStore:
         ).fetchall()
         return [(r[0], r[1]) for r in rows]
 
-    def get_cross_engagement_failures(self, tool: str | None = None, limit: int = 100) -> list[dict]:
+    def get_cross_engagement_failures(
+            self, tool: str | None = None, limit: int = 100) -> list[dict]:
         self._wait_for_init()
         if tool:
             rows = self.conn.execute(
@@ -587,15 +683,55 @@ class StateStore:
             for r in rows
         ]
 
+    def store_credential(self, engagement_id: str, target: str, service: str,
+                         username: str, password: str, auth_type: str = "password",
+                         source_tool: str = "unknown"):
+        self._wait_for_init()
+        now = datetime.now(timezone.utc).isoformat()
+        self._submit_write(
+            ("""INSERT OR IGNORE INTO credentials
+               (engagement_id, target, service, username, password, auth_type, source_tool, timestamp)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+             (engagement_id, target, service, username, password, auth_type, source_tool, now))
+        )
+
+    def get_credentials(self, engagement_id: str,
+                        target: str | None = None) -> list[dict]:
+        self._wait_for_init()
+        if target:
+            rows = self.conn.execute(
+                """SELECT target, service, username, password, auth_type, source_tool, timestamp
+                   FROM credentials WHERE engagement_id=? AND target=? ORDER BY timestamp DESC""",
+                (engagement_id, target)
+            ).fetchall()
+        else:
+            rows = self.conn.execute(
+                """SELECT target, service, username, password, auth_type, source_tool, timestamp
+                   FROM credentials WHERE engagement_id=? ORDER BY timestamp DESC""",
+                (engagement_id,)
+            ).fetchall()
+
+        return [
+            dict(target=r[0], service=r[1], username=r[2], password=r[3],
+                 auth_type=r[4], source_tool=r[5], timestamp=r[6])
+            for r in rows
+        ]
+
     def close(self):
         if hasattr(self, 'write_queue') and self.write_queue:
             self.write_queue.put(None)
             if hasattr(self, 'writer_thread') and self.writer_thread.is_alive():
                 self.writer_thread.join(timeout=2.0)
-        
+
         if getattr(self, 'conn', None):
             try:
+                try:
+                    self.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                except Exception as e:
+                    import logging as __logging_tmp
+                    __logging_tmp.getLogger(__name__).debug(
+                        f"Ignored error: {e}")
                 self.conn.close()
-            except Exception:
-                pass
+            except Exception as _e:
+                log.warning(f"Failed to close connection: {_e}")
             self.conn = None

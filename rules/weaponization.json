@@ -1,0 +1,28 @@
+{
+    "weaponizable_types": [
+        "sql_injection", "sqli", "xss", "lfi", "rfi", "rce", "ssrf", "ssti", "xxe",
+        "sensitive_data", "directory_listing", "backup_file", "git_repo",
+        "exposed_config", "env_file", "unauthorized_access",
+        "idor", "broken_auth", "csrf", "open_redirect", "jwt_weakness",
+        "cors_misconfig", "subdomain_takeover",
+        "vulnerability", "web_vulnerability", "cve", "ai_dynamic_exploit", "nuclei_confirmed"
+    ],
+    "noise_patterns": [
+        "uncommon header", "x-hcdn-request-id", "alt-svc", "maximum execution time",
+        "items checked", "target ip", "target hostname", "1 host(s) tested",
+        "<!doctype html", "<html", "<body",
+        "missing csp", "missing hsts", "missing x-frame", "missing x-content",
+        "missing permissions-policy", "core security headers present"
+    ],
+    "proof_failure_phrases": [
+        "not extracted", "not found", "failed", "no proof",
+        "unable", "could not", "error", "none", "n/a",
+        "no sql", "no path", "no xss", "no cors", "appears secure",
+        "not proven", "did not", "no user enum",
+        "hardened", "rejected", "<!doctype", "<html"
+    ],
+
+    "max_pocs_to_synthesize": 3,
+    "path_probe_timeout": 10,
+    "path_probe_user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+}

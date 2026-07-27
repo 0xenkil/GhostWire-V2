@@ -1,0 +1,18 @@
+# Scope Enforcement Rules
+blocked_ip_ranges:
+  - "0.0.0.0/8"
+  - "10.0.0.0/8"
+  - "127.0.0.0/8"
+  - "169.254.0.0/16"
+  - "172.16.0.0/12"
+  - "192.168.0.0/16"
+  - "224.0.0.0/4"
+  - "240.0.0.0/4"
+
+always_blocked_domains:
+  - "google.com"
+  - "cloudflare.com"
+  - "amazonaws.com"
+  - "microsoft.com"
+  - "apple.com"
+  - "facebook.com"

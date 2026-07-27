@@ -1,0 +1,1 @@
+"        elif p in completed:\n            status = completed[p]\n            color = C_SUCCESS if status == \"success\" else C_DANGER\n            parts.append(f\"[bold {color}]● {tag}[/]\")\n        else:\n            parts.append(f\"[bold {C_DIM}]○ {tag}[/]\")"

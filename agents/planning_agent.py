@@ -1,11 +1,13 @@
 from agents.base_agent import BaseAgent
 from utils.display import section, info, warning, success
-from intelligence.waf_bypass_orchestrator import WafBypassOrchestrator
+from core.result_contracts import ResultStatus
+
 
 class PlanningAgent(BaseAgent):
     async def run(self) -> dict:
         section("PHASE 1 - Planning & Preparation")
-        self.store.set_phase_status(self.session.engagement_id, "planning", "running")
+        self.store.set_phase_status(
+            self.session.engagement_id, "planning", "running")
 
         # Validate scope
         if not self.session.scope:
@@ -18,47 +20,12 @@ class PlanningAgent(BaseAgent):
         info(f"Mode: {self.session.mode}")
         info(f"ROE: {self.session.rules_of_engagement}")
 
-        # ===== WAF BYPASS ORCHESTRATION =====
-        info("\n[GHOST-PROTOCOL] Initializing active WAF bypass orchestration...")
-        try:
-            orchestrator = WafBypassOrchestrator(state_store=self.store)
-            bypass_analysis = orchestrator.analyze_target(self.session.engagement_id, self.session.target)
-            
-            # Store WAF policy posture for use by other agents
-            import json
-            self.store.set(
-                f"{self.session.engagement_id}:waf_bypass_analysis",
-                json.dumps(bypass_analysis)
-            )
-            
-            # Display findings
-            rec_bypass = bypass_analysis.get("recommended_bypass")
-            priority_order = bypass_analysis.get("bypass_priority_order", [])
-            risk_level = bypass_analysis.get("risk_profile", {}).get("risk_level", "unknown")
-            
-            if rec_bypass:
-                success(f"WAF bypass strategy: {rec_bypass.upper()}")
-                info(f"  Priority order: {' -> '.join(priority_order[:5])}")
-                info(f"  Risk level: {risk_level}")
-                
-                # Show viability scores
-                viability = bypass_analysis.get("viability_scores", {})
-                viable_layers = sorted([(k, v) for k, v in viability.items() if v > 0.3], 
-                                      key=lambda x: x[1], reverse=True)
-                if viable_layers:
-                    info(f"  Policy layers:")
-                    for layer, score in viable_layers[:5]:
-                        info(f"    - {layer}: {score:.0%} viable")
-            else:
-                info("  Direct probing active: target appears to have minimal WAF filtering")
-            
-        except Exception as e:
-            warning(f"WAF defense policy analysis error (non-fatal): {e}")
-
         # AI-driven goal analysis with schema-validated planning
         from core.robust_parser import extract_json_object
         prompt = (
-            f"We are beginning a {self.session.mode} engagement against target: {self.session.normalized_target()}. "
+            f"We are beginning a {
+                self.session.mode} engagement against target: {
+                self.session.normalized_target()}. "
             f"Scope: {self.session.scope}. "
             f"Rules of engagement: {self.session.rules_of_engagement}. "
             f"Generate a structured Concept of Operations (ConOps) and Rules of Engagement (RoE). "
@@ -72,14 +39,42 @@ class PlanningAgent(BaseAgent):
         raw_analysis = self.think(prompt)
         try:
             analysis = extract_json_object(raw_analysis)
-        except Exception:
-            analysis = {"ConOps": "Fallback plan", "RoE": self.session.rules_of_engagement, "phases": []}
-            
-        info(f"\nAI Planning Analysis (Schema Validated):\n{json.dumps(analysis, indent=2)}")
+        except Exception as e:
+            import logging as __logging_tmp
+            __logging_tmp.getLogger(__name__).debug(f"Silenced exception: {e}")
+            analysis = {
+                "ConOps": "Fallback plan",
+                "RoE": self.session.rules_of_engagement,
+                "phases": []}
+
+        # Format the plan nicely instead of a raw JSON dump
+        analysis_lower = {k.lower(): v for k, v in analysis.items()}
+
+        plan_ui = "\n" + "=" * 60 + "\n"
+        plan_ui += " TACTICAL ENGAGEMENT PLAN\n"
+        plan_ui += "=" * 60 + "\n\n"
+        
+        conops_val = analysis_lower.get('conops', analysis_lower.get('concept_of_operations', 'None'))
+        plan_ui += f" [CONOPS] Concept of Operations:\n {conops_val}\n\n"
+        
+        roe_val = analysis_lower.get('roe', analysis_lower.get('rules_of_engagement', 'None'))
+        plan_ui += f" [RoE] Rules of Engagement:\n {roe_val}\n\n"
+
+        phases = analysis_lower.get('phases', [])
+        if phases:
+            plan_ui += " [PHASES] Execution Pipeline:\n"
+            for i, p in enumerate(phases, 1):
+                plan_ui += f"   {i}. {p}\n"
+
+        plan_ui += "=" * 60
+        info(plan_ui)
 
         self.add_finding(
             "engagement_plan", self.session.normalized_target(),
-            f"Mode={self.session.mode}, Scope={self.session.scope}, ROE={self.session.rules_of_engagement}",
+            f"Mode={
+                self.session.mode}, Scope={
+                self.session.scope}, ROE={
+                self.session.rules_of_engagement}",
             "info"
         )
 
@@ -92,12 +87,15 @@ class PlanningAgent(BaseAgent):
             "roe": self.session.rules_of_engagement,
             "ai_analysis": analysis
         }
-        for agent_name in ["recon", "exploitation", "weaponization", "persistence", "objectives", "reporting"]:
+        for agent_name in ["recon", "exploitation", "weaponization",
+                           "persistence", "objectives", "reporting"]:
             self.bus.publish("planning", agent_name, plan_message)
 
-        self.store.set_phase_status(
-            self.session.engagement_id, "planning", "complete",
-            f"Scope confirmed: {self.session.scope}"
-        )
         success("Planning phase complete.")
-        return {"target": self.session.normalized_target(), "scope": self.session.scope, "analysis": analysis}
+        return self.finish_phase(
+            {"target": self.session.normalized_target(),
+             "scope": self.session.scope,
+             "analysis": analysis},
+            status=ResultStatus.SUCCESS,
+            message=f"Scope confirmed: {self.session.scope}"
+        )

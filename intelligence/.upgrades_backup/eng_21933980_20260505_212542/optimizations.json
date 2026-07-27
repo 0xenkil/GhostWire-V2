@@ -1,0 +1,89 @@
+{
+  "timestamp": "2026-05-05T21:25:42.629855",
+  "engagement_id": "eng_21933980",
+  "changes": {
+    "tool_effectiveness": {
+      "tool_rates_adjusted": {
+        "dig": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 6,
+          "avg_duration": 0.2665187915166219,
+          "recommendation": "highly_effective"
+        },
+        "curl": {
+          "success_rate": 0.4,
+          "priority": 0.4,
+          "total_runs": 5,
+          "avg_duration": 6.327442789077759,
+          "recommendation": "unreliable"
+        }
+      },
+      "tool_order_changed": false,
+      "reasoning": [
+        "Tool 'dig' highly effective (100% success) - prioritize"
+      ]
+    },
+    "finding_confidence": {
+      "confidence_adjustments": {},
+      "high_confidence_techs": [
+        {
+          "technology": "cloudflare",
+          "confidence": 0.95,
+          "reasoning": "Found 3 times in engagement"
+        }
+      ],
+      "reasoning": [
+        "Technology 'cloudflare' appears reliably (3 times)"
+      ]
+    },
+    "timeouts": {
+      "timeout_adjustments": {},
+      "reasoning": []
+    },
+    "waf_handling": {
+      "waf_rules": {
+        "cloudflare": {
+          "tools_to_avoid": [],
+          "tools_to_use": [
+            "curl",
+            "dig",
+            "subfinder",
+            "gobuster",
+            "nmap",
+            "wafw00f",
+            "nikto",
+            "nuclei"
+          ],
+          "recommended_order": [
+            "dig",
+            "curl",
+            "subfinder",
+            "gobuster",
+            "nmap",
+            "wafw00f",
+            "nikto",
+            "nuclei"
+          ],
+          "top_evasion_vectors": []
+        }
+      },
+      "blocked_tools": {},
+      "effective_tools": {},
+      "evasion_priorities": {},
+      "reasoning": [
+        "Against cloudflare, use: curl, dig, subfinder"
+      ]
+    }
+  },
+  "recommendations": [
+    {
+      "type": "waf_defense_policy",
+      "waf": "cloudflare",
+      "tools_to_avoid": [],
+      "priority": "high",
+      "reasoning": "cloudflare detected - keep validation low-rate, record block evidence, and stop commands that trigger WAF/rate-limit/CAPTCHA responses"
+    }
+  ],
+  "rollback_data": {}
+}

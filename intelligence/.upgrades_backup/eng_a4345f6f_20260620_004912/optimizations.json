@@ -1,0 +1,115 @@
+{
+  "timestamp": "2026-06-20T00:49:12.729561",
+  "engagement_id": "eng_a4345f6f",
+  "changes": {
+    "tool_effectiveness": {
+      "tool_rates_adjusted": {
+        "nikto": {
+          "success_rate": 0.0,
+          "priority": 0.0,
+          "total_runs": 2,
+          "avg_duration": 673.7511565685272,
+          "recommendation": "never_works"
+        },
+        "httpx": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 3,
+          "avg_duration": 2.710263649622599,
+          "recommendation": "highly_effective"
+        },
+        "git": {
+          "success_rate": 0.0,
+          "priority": 0.0,
+          "total_runs": 3,
+          "avg_duration": 0.838278611501058,
+          "recommendation": "never_works"
+        },
+        "curl": {
+          "success_rate": 0.7857142857142857,
+          "priority": 0.7857142857142857,
+          "total_runs": 14,
+          "avg_duration": 4.0738789183752875,
+          "recommendation": "effective"
+        },
+        "gobuster": {
+          "success_rate": 0.3333333333333333,
+          "priority": 0.3333333333333333,
+          "total_runs": 9,
+          "avg_duration": 8.538055446412828,
+          "recommendation": "unreliable"
+        },
+        "nmap": {
+          "success_rate": 0.6666666666666666,
+          "priority": 0.6666666666666666,
+          "total_runs": 3,
+          "avg_duration": 5.226969242095947,
+          "recommendation": "moderate"
+        },
+        "dig": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 5,
+          "avg_duration": 0.3761706829071045,
+          "recommendation": "highly_effective"
+        },
+        "whatweb": {
+          "success_rate": 0.6666666666666666,
+          "priority": 0.6666666666666666,
+          "total_runs": 3,
+          "avg_duration": 9.495631376902262,
+          "recommendation": "moderate"
+        },
+        "ffuf": {
+          "success_rate": 0.0,
+          "priority": 0.0,
+          "total_runs": 12,
+          "avg_duration": 523.6246245503426,
+          "recommendation": "never_works"
+        }
+      },
+      "tool_order_changed": false,
+      "reasoning": [
+        "Tool 'httpx' highly effective (100% success) - prioritize",
+        "Tool 'git' has 0% success rate after 3 runs - consider removing",
+        "Tool 'dig' highly effective (100% success) - prioritize",
+        "Tool 'ffuf' has 0% success rate after 12 runs - consider removing"
+      ]
+    },
+    "finding_confidence": {
+      "confidence_adjustments": {},
+      "high_confidence_techs": [
+        {
+          "technology": "nodejs",
+          "confidence": 0.95,
+          "reasoning": "Found 4 times in engagement"
+        }
+      ],
+      "reasoning": [
+        "Technology 'nodejs' appears reliably (4 times)"
+      ]
+    },
+    "timeouts": {
+      "timeout_adjustments": {},
+      "reasoning": []
+    },
+    "waf_handling": {
+      "waf_rules": {},
+      "blocked_tools": {},
+      "effective_tools": {},
+      "reasoning": []
+    }
+  },
+  "recommendations": [
+    {
+      "type": "skip_ineffective_tools",
+      "tools": [
+        "git",
+        "ffuf"
+      ],
+      "priority": "medium",
+      "reasoning": "Tools ['git', 'ffuf'] never succeeded - consider skipping on similar targets"
+    }
+  ],
+  "rollback_data": {}
+}

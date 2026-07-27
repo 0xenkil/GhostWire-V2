@@ -1,0 +1,11 @@
+[
+  {
+    "type": "waf_defense_policy",
+    "waf": "cloudflare",
+    "tools_to_avoid": [
+      "gobuster"
+    ],
+    "priority": "high",
+    "reasoning": "cloudflare detected - keep validation low-rate, record block evidence, and stop commands that trigger WAF/rate-limit/CAPTCHA responses"
+  }
+]

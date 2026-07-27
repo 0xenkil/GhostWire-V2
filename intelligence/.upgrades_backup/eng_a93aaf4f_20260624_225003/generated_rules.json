@@ -1,0 +1,46 @@
+{
+  "engagement_id": "eng_a93aaf4f",
+  "timestamp": "2026-06-24T22:50:03.447793",
+  "rules": {
+    "exploitation": [],
+    "infrastructure": [
+      {
+        "id": "waf_generic_waf_handling",
+        "name": "Handle generic_waf WAF",
+        "type": "waf_detection",
+        "condition": {
+          "waf_detected": "generic_waf"
+        },
+        "actions": {
+          "skip_tools": [
+            "ffuf",
+            "gobuster"
+          ],
+          "prefer_tools": [
+            "curl",
+            "dig",
+            "subfinder",
+            "httpx",
+            "whatweb",
+            "nmap",
+            "gobuster",
+            "hydra",
+            "ffuf",
+            "nuclei"
+          ],
+          "use_evasion": true
+        },
+        "confidence": 0.9,
+        "source": "engagement_eng_a93aaf4f"
+      }
+    ],
+    "recon": [],
+    "weaponization": []
+  },
+  "generated_from_patterns": [
+    "Perfect tools (100% success): httpx, dig, subfinder",
+    "Never-successful tools: sqlmap, nikto, commix, searchsploit",
+    "generic_waf blocks: ffuf, gobuster",
+    "Pattern: generic_waf WAF detection"
+  ]
+}

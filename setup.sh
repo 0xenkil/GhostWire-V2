@@ -1,10 +1,11 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════════
-# GHOSTWIRE V2 — Full VPS Audit & Setup Script
+# GHOSTWIRE V7 — Full WSL Audit & Setup Script
 # Checks all tools, installs missing ones, updates system
+# Run this INSIDE your WSL terminal (not PowerShell)
 # ═══════════════════════════════════════════════════════════════
 set -o pipefail
-
+set -e
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -30,7 +31,7 @@ check_tool() {
 }
 
 echo -e "\n${CYAN}══════════════════════════════════════════════════${NC}"
-echo -e "${CYAN}  GHOSTWIRE V2 — VPS Audit & Provisioning${NC}"
+echo -e "${CYAN}  GHOSTWIRE V7 — WSL Audit & Provisioning${NC}"
 echo -e "${CYAN}══════════════════════════════════════════════════${NC}\n"
 
 # ── Phase 0: System Info ──────────────────────────────────────
@@ -62,16 +63,25 @@ CORE_PACKAGES=(
     dnsutils whois netcat-openbsd traceroute net-tools iputils-ping
     # Security tools
     nmap masscan nikto gobuster dirb sqlmap hydra
-    enum4linux smbclient john hashcat
+    smbclient john hashcat
     # Playwright system deps (V2 Phase E)
     libnss3 libatk-bridge2.0-0 libdrm2 libxkbcommon0 libgbm1
-    libasound2 libxshmfence1 libx11-xcb1 libxcomposite1
+    libxshmfence1 libx11-xcb1 libxcomposite1
     libxdamage1 libxrandr2 libpango-1.0-0 libcairo2 libcups2
     libatk1.0-0 libnspr4 libgdk-pixbuf-2.0-0 libgtk-3-0
     libxss1 fonts-liberation xdg-utils
 )
 
-apt-get install -y -qq ${CORE_PACKAGES[@]} 2>/dev/null || true
+# Robust Individual Package Installer Loop
+for pkg in "${CORE_PACKAGES[@]}"; do
+    echo -e "  → Installing $pkg..."
+    apt-get install -y -qq "$pkg" 2>/dev/null || echo -e "  ${YELLOW}⚠${NC} Could not install $pkg via standard repo - skipping"
+done
+
+# Resilient Virtual Package Fallback Check
+echo -e "  → Installing libasound2 dependency..."
+apt-get install -y -qq libasound2 2>/dev/null || apt-get install -y -qq libasound2t64 2>/dev/null || echo -e "  ${YELLOW}⚠${NC} libasound2 package skipped"
+
 echo -e "  ${GREEN}✓${NC} Core packages installed"
 echo ""
 
@@ -99,9 +109,9 @@ fi
 # --- ffuf (from GitHub if apt failed) ---
 if ! command -v ffuf &>/dev/null; then
     echo -e "  ${YELLOW}→${NC} Installing ffuf from GitHub..."
-    FFUF_VER=$(curl -s https://api.github.com/repos/ffuf/ffuf/releases/latest | grep -oP '(?<="tag_name": "v)[^"]+') 2>/dev/null
+    FFUF_VER=$(curl -sL --max-time 120 https://api.github.com/repos/ffuf/ffuf/releases/latest | grep -oP '(?<="tag_name": "v)[^"]+') 2>/dev/null
     if [ ! -z "$FFUF_VER" ]; then
-        curl -sL "https://github.com/ffuf/ffuf/releases/download/v${FFUF_VER}/ffuf_${FFUF_VER}_linux_amd64.tar.gz" -o /tmp/ffuf.tar.gz
+        curl -sL --max-time 120 "https://github.com/ffuf/ffuf/releases/download/v${FFUF_VER}/ffuf_${FFUF_VER}_linux_amd64.tar.gz" -o /tmp/ffuf.tar.gz
         tar -xzf /tmp/ffuf.tar.gz -C /usr/local/bin ffuf 2>/dev/null
         chmod +x /usr/local/bin/ffuf
         rm -f /tmp/ffuf.tar.gz
@@ -112,11 +122,10 @@ fi
 # --- nuclei ---
 if ! command -v nuclei &>/dev/null; then
     echo -e "  ${YELLOW}→${NC} Installing nuclei from GitHub..."
-    NUCLEI_VER=$(curl -s https://api.github.com/repos/projectdiscovery/nuclei/releases/latest | grep 'tag_name' | cut -d '"' -f 4 | tr -d 'v')
+    NUCLEI_VER=$(curl -sL --max-time 120 https://api.github.com/repos/projectdiscovery/nuclei/releases/latest | grep 'tag_name' | cut -d '"' -f 4 | tr -d 'v')
     if [ ! -z "$NUCLEI_VER" ]; then
-        curl -sL "https://github.com/projectdiscovery/nuclei/releases/download/v${NUCLEI_VER}/nuclei_${NUCLEI_VER}_linux_amd64.zip" -o /tmp/nuclei.zip
-        cd /tmp && unzip -o nuclei.zip nuclei 2>/dev/null
-        chmod +x nuclei && mv nuclei /usr/local/bin/nuclei
+        curl -sL --max-time 120 "https://github.com/projectdiscovery/nuclei/releases/download/v${NUCLEI_VER}/nuclei_${NUCLEI_VER}_linux_amd64.zip" -o /tmp/nuclei.zip
+        (cd /tmp && unzip -o nuclei.zip nuclei && chmod +x nuclei && mv nuclei /usr/local/bin/nuclei) 2>/dev/null
         rm -f /tmp/nuclei.zip
         INSTALLED=$((INSTALLED + 1))
     fi
@@ -124,12 +133,12 @@ fi
 
 # --- Update nuclei templates ---
 echo -e "  ${YELLOW}→${NC} Updating nuclei templates..."
-nuclei -ut -silent 2>/dev/null || true
+timeout 120 nuclei -ut -silent 2>/dev/null || true
 
 # --- curl-impersonate (JA3 bypass) ---
 if ! command -v curl-impersonate-chrome &>/dev/null; then
     echo -e "  ${YELLOW}→${NC} Installing curl-impersonate..."
-    curl -sL "https://github.com/lwthiker/curl-impersonate/releases/download/v0.6.1/curl-impersonate-v0.6.1.x86_64-linux-gnu.tar.gz" -o /tmp/curl-imp.tar.gz 2>/dev/null
+    curl -sL --max-time 120 "https://github.com/lwthiker/curl-impersonate/releases/download/v0.6.1/curl-impersonate-v0.6.1.x86_64-linux-gnu.tar.gz" -o /tmp/curl-imp.tar.gz 2>/dev/null
     tar -xzf /tmp/curl-imp.tar.gz -C /usr/local/bin/ 2>/dev/null
     chmod +x /usr/local/bin/curl-impersonate-chrome 2>/dev/null
     rm -f /tmp/curl-imp.tar.gz
@@ -139,7 +148,25 @@ fi
 # --- Playwright (V2 Phase E: Headless Browser) ---
 echo -e "  ${YELLOW}→${NC} Setting up Playwright + Chromium..."
 pip3 install playwright --break-system-packages --quiet 2>/dev/null
-playwright install chromium 2>/dev/null || true
+
+# Attempt native Playwright installation
+if ! timeout 600 playwright install chromium 2>/dev/null; then
+    echo -e "  ${YELLOW}⚠${NC} Playwright native install failed (likely unsupported OS like Ubuntu 26.04). Using fallback..."
+    # Attempt apt install
+    apt-get install -y -qq chromium-browser 2>/dev/null || apt-get install -y -qq chromium 2>/dev/null
+    
+    # If apt failed, attempt direct Google Chrome deb installation
+    if ! command -v chromium-browser &>/dev/null && ! command -v chromium &>/dev/null; then
+        echo -e "  ${YELLOW}→${NC} Downloading and installing Google Chrome stable..."
+        wget -q --timeout=120 https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -O /tmp/google-chrome.deb
+        apt-get install -y -qq /tmp/google-chrome.deb 2>/dev/null || true
+        rm -f /tmp/google-chrome.deb
+    fi
+    
+    # Tell Playwright to look for system browsers
+    echo "export PLAYWRIGHT_BROWSERS_PATH=0" >> ~/.bashrc
+    export PLAYWRIGHT_BROWSERS_PATH=0
+fi
 INSTALLED=$((INSTALLED + 1))
 
 echo ""
@@ -152,7 +179,7 @@ echo -e "  ${GREEN}✓${NC} Python dependencies installed"
 echo ""
 
 # ── Phase 5: Create Required Directories ──────────────────────
-echo -e "${YELLOW}[5/7] Setting Up VPS Directories...${NC}"
+echo -e "${YELLOW}[5/7] Setting Up WSL Directories...${NC}"
 mkdir -p /tmp/antigravity/buffers
 mkdir -p /tmp/antigravity/results
 mkdir -p /root/results
@@ -167,7 +194,7 @@ fi
 # Fallback: download SecLists common.txt
 if [ ! -f "/tmp/wordlist_common.txt" ]; then
     echo -e "  ${YELLOW}→${NC} Downloading SecLists common.txt..."
-    curl -sL "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/common.txt" -o /tmp/wordlist_common.txt 2>/dev/null
+    curl -sL --max-time 120 "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/common.txt" -o /tmp/wordlist_common.txt 2>/dev/null
 fi
 echo -e "  ${GREEN}✓${NC} Wordlists ready"
 echo ""
@@ -248,7 +275,7 @@ echo ""
 echo -e "${CYAN}══════════════════════════════════════════════════${NC}"
 echo -e "  ${GREEN}PASS: $PASS${NC}  ${RED}FAIL: $FAIL${NC}  ${YELLOW}INSTALLED: $INSTALLED${NC}"
 if [ $FAIL -eq 0 ]; then
-    echo -e "  ${GREEN}★ VPS IS FULLY OPERATIONAL ★${NC}"
+    echo -e "  ${GREEN}★ WSL IS FULLY OPERATIONAL ★${NC}"
 else
     echo -e "  ${YELLOW}⚠ $FAIL tool(s) may need manual installation${NC}"
 fi

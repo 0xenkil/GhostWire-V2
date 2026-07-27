@@ -1,0 +1,20 @@
+[
+  {
+    "type": "waf_bypass_strategy",
+    "waf": "generic_waf",
+    "tools_to_use": [
+      "nikto",
+      "dig",
+      "curl",
+      "sslscan",
+      "masscan",
+      "nmap"
+    ],
+    "tools_to_avoid": [
+      "whatweb",
+      "gobuster"
+    ],
+    "priority": "high",
+    "reasoning": "Against generic_waf, prioritize nikto, dig, curl, sslscan, masscan, nmap"
+  }
+]

@@ -1,0 +1,116 @@
+{
+  "timestamp": "2026-05-23T13:43:34.968808",
+  "engagement_id": "eng_2915c92d",
+  "changes": {
+    "tool_effectiveness": {
+      "tool_rates_adjusted": {
+        "masscan": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 5,
+          "avg_duration": 2.0416759490966796,
+          "recommendation": "highly_effective"
+        },
+        "dig": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 4,
+          "avg_duration": 0.2762777805328369,
+          "recommendation": "highly_effective"
+        },
+        "dirsearch": {
+          "success_rate": 0.0,
+          "priority": 0.0,
+          "total_runs": 2,
+          "avg_duration": 0.4524146318435669,
+          "recommendation": "never_works"
+        },
+        "ssh_cmd": {
+          "success_rate": 0.0,
+          "priority": 0.0,
+          "total_runs": 5,
+          "avg_duration": 0.6206033229827881,
+          "recommendation": "never_works"
+        },
+        "subfinder": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 2,
+          "avg_duration": 4.382797598838806,
+          "recommendation": "highly_effective"
+        },
+        "dirb": {
+          "success_rate": 0.0,
+          "priority": 0.0,
+          "total_runs": 4,
+          "avg_duration": 0.27410590648651123,
+          "recommendation": "never_works"
+        }
+      },
+      "tool_order_changed": false,
+      "reasoning": [
+        "Tool 'masscan' highly effective (100% success) - prioritize",
+        "Tool 'dig' highly effective (100% success) - prioritize",
+        "Tool 'ssh_cmd' has 0% success rate after 5 runs - consider removing",
+        "Tool 'subfinder' highly effective (100% success) - prioritize",
+        "Tool 'dirb' has 0% success rate after 4 runs - consider removing"
+      ]
+    },
+    "finding_confidence": {
+      "confidence_adjustments": {},
+      "high_confidence_techs": [],
+      "reasoning": []
+    },
+    "timeouts": {
+      "timeout_adjustments": {},
+      "reasoning": []
+    },
+    "waf_handling": {
+      "waf_rules": {
+        "generic_waf": {
+          "tools_to_avoid": [],
+          "tools_to_use": [
+            "dig",
+            "masscan",
+            "sslscan",
+            "subfinder",
+            "whatweb"
+          ],
+          "recommended_order": [
+            "masscan",
+            "dig",
+            "subfinder",
+            "sslscan",
+            "whatweb"
+          ],
+          "top_evasion_vectors": []
+        }
+      },
+      "blocked_tools": {},
+      "effective_tools": {},
+      "evasion_priorities": {},
+      "reasoning": [
+        "Against generic_waf, use: dig, masscan, sslscan"
+      ]
+    }
+  },
+  "recommendations": [
+    {
+      "type": "waf_defense_policy",
+      "waf": "generic_waf",
+      "tools_to_avoid": [],
+      "priority": "high",
+      "reasoning": "generic_waf detected - keep validation low-rate, record block evidence, and stop commands that trigger WAF/rate-limit/CAPTCHA responses"
+    },
+    {
+      "type": "skip_ineffective_tools",
+      "tools": [
+        "ssh_cmd",
+        "dirb"
+      ],
+      "priority": "medium",
+      "reasoning": "Tools ['ssh_cmd', 'dirb'] never succeeded - consider skipping on similar targets"
+    }
+  ],
+  "rollback_data": {}
+}

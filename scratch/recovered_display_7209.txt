@@ -1,0 +1,1 @@
+"    class Group:\n        def __init__(self, *a): pass\n    class Align:\n        @staticmethod\n        def center(r, **kw): return r\n\nfrom utils.logger import get_logger"

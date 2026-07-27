@@ -1,0 +1,20 @@
+[
+  {
+    "type": "waf_defense_policy",
+    "waf": "generic_waf",
+    "tools_to_avoid": [],
+    "priority": "high",
+    "reasoning": "generic_waf detected - keep validation low-rate, record block evidence, and stop commands that trigger WAF/rate-limit/CAPTCHA responses"
+  },
+  {
+    "type": "skip_ineffective_tools",
+    "tools": [
+      "nuclei",
+      "sqlmap",
+      "curl",
+      "gobuster"
+    ],
+    "priority": "medium",
+    "reasoning": "Tools ['nuclei', 'sqlmap', 'curl', 'gobuster'] never succeeded - consider skipping on similar targets"
+  }
+]

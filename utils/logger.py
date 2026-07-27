@@ -13,8 +13,9 @@ if sys.platform == "win32":
         import ctypes
         ctypes.windll.kernel32.SetConsoleOutputCP(65001)
         os.environ["PYTHONIOENCODING"] = "utf-8"
-    except Exception:
-        pass
+    except Exception as _e:
+        logging.getLogger(__name__).debug(
+            f'Swallowed exception in logger.py: {_e}')
 
 try:
     from rich.console import Console as RichConsole
@@ -26,7 +27,9 @@ try:
 except ImportError:
     _RICH_OK = False
     _LOG_CONSOLE = None
-    class RichHandler: pass
+
+    class RichHandler:
+        pass
 
 _loggers = {}
 _log_dir: Path = None
@@ -50,22 +53,26 @@ def _attach_file_handler(logger: logging.Logger, name: str, log_dir: Path):
             "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S"
         )
-        fh = logging.FileHandler(log_dir / f"{name}.log", encoding="utf-8")
+        from logging.handlers import RotatingFileHandler
+        fh = RotatingFileHandler(log_dir / f"{name}.log", maxBytes=10*1024*1024, backupCount=5, encoding="utf-8")
         fh.setLevel(logging.DEBUG)
         fh.setFormatter(fmt)
         logger.addHandler(fh)
     except Exception as e:
-        print(f"Warning: Failed to attach file handler for {name}: {e}", file=sys.stderr)
+        print(
+            f"Warning: Failed to attach file handler for {name}: {e}",
+            file=sys.stderr)
 
 
 class RedTeamHandler(RichHandler):
     """Custom handler with HUD brackets-themed level prefixes."""
+
     def get_level_text(self, record: logging.LogRecord) -> str:
         level_map = {
-            logging.DEBUG:    "[bold dim][ SYS.DBG  ][/bold dim]",
-            logging.INFO:     "[bold #475266][ SYS.INFO ][/bold #475266]",
-            logging.WARNING:  "[bold #ffaa00][ SYS.WARN ][/bold #ffaa00]",
-            logging.ERROR:    "[bold #ff0055][ SYS.FAIL ][/bold #ff0055]",
+            logging.DEBUG: "[bold dim][ SYS.DBG  ][/bold dim]",
+            logging.INFO: "[bold #475266][ SYS.INFO ][/bold #475266]",
+            logging.WARNING: "[bold #ffaa00][ SYS.WARN ][/bold #ffaa00]",
+            logging.ERROR: "[bold #ff0055][ SYS.FAIL ][/bold #ff0055]",
             logging.CRITICAL: "[bold white on #ff0055][ SYS.CRIT ][/bold white on #ff0055]",
         }
         msg = record.getMessage()
@@ -92,7 +99,10 @@ def get_logger(name: str, log_dir: Path = None) -> logging.Logger:
                 show_time=False,
                 show_level=True,
             )
-        except Exception:
+        except Exception as e:
+            import logging as __logging_tmp
+            __logging_tmp.getLogger(__name__).error(
+                f"Unhandled exception: {e}", exc_info=True)
             ch = logging.StreamHandler(sys.stdout)
     else:
         ch = logging.StreamHandler(sys.stdout)

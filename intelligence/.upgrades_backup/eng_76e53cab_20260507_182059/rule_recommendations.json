@@ -1,0 +1,19 @@
+[
+  {
+    "type": "waf_defense_policy",
+    "waf": "generic_waf",
+    "tools_to_avoid": [],
+    "priority": "high",
+    "reasoning": "generic_waf detected - keep validation low-rate, record block evidence, and stop commands that trigger WAF/rate-limit/CAPTCHA responses"
+  },
+  {
+    "type": "skip_ineffective_tools",
+    "tools": [
+      "gobuster",
+      "hydra",
+      "dirb"
+    ],
+    "priority": "medium",
+    "reasoning": "Tools ['gobuster', 'hydra', 'dirb'] never succeeded - consider skipping on similar targets"
+  }
+]

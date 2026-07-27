@@ -1,0 +1,1 @@
+"try:\n    from rich import box\n    from rich.console import Console, Group\n    from rich.panel import Panel\n    from rich.table import Table\n    from rich.text import Text\n    from rich.padding import Padding\n    from rich.align import Align\n    RICH_AVAILABLE = True"

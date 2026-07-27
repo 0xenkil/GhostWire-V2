@@ -1,0 +1,1 @@
+"def section(title: str):\n    \"\"\"Draw a clean, beautiful horizontal section panel.\"\"\"\n    sec_text = Text.from_markup(f\"[bold {C_ACCENT}]◆ {title.upper()} ◆[/]\")\n    console.print(Align.center(sec_text))\n    console.print(Align.center(Text.from_markup(f\"[bold {C_DIM}]\" + \"—\"*72 + \"[/]\")))\n    console.print()\n    log.debug(f\"--- SECTION: {title} ---\")"

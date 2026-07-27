@@ -1,0 +1,18 @@
+[
+  {
+    "type": "waf_bypass_strategy",
+    "waf": "generic_waf",
+    "tools_to_use": [
+      "curl",
+      "nmap",
+      "subfinder",
+      "whatweb",
+      "dig"
+    ],
+    "tools_to_avoid": [
+      "gobuster"
+    ],
+    "priority": "high",
+    "reasoning": "Against generic_waf, prioritize curl, nmap, subfinder, whatweb, dig"
+  }
+]

@@ -1,0 +1,266 @@
+{
+  "tool_effectiveness": {
+    "curl": {
+      "success": 97,
+      "failure": 1,
+      "avg_time": 0.9790413255999687
+    },
+    "dig": {
+      "success": 49,
+      "failure": 0,
+      "avg_time": 0.1337208212638388
+    },
+    "subfinder": {
+      "success": 10,
+      "failure": 0,
+      "avg_time": 10.518859314918519
+    },
+    "httpx": {
+      "success": 6,
+      "failure": 2,
+      "avg_time": 1.453496664762497
+    },
+    "nmap": {
+      "success": 18,
+      "failure": 0,
+      "avg_time": 9.455369618203905
+    },
+    "nuclei": {
+      "success": 13,
+      "failure": 7,
+      "avg_time": 311.5302566409111
+    },
+    "whatweb": {
+      "success": 11,
+      "failure": 0,
+      "avg_time": 1.2472352981567383
+    },
+    "nikto": {
+      "success": 19,
+      "failure": 0,
+      "avg_time": 116.25285961753444
+    },
+    "ffuf": {
+      "success": 25,
+      "failure": 2,
+      "avg_time": 85.63513908562837
+    },
+    "hydra": {
+      "success": 15,
+      "failure": 3,
+      "avg_time": 11.044167677561441
+    },
+    "gobuster": {
+      "success": 5,
+      "failure": 5,
+      "avg_time": 106.01815779209137
+    },
+    "sslscan": {
+      "success": 2,
+      "failure": 1,
+      "avg_time": 8.068694988886515
+    },
+    "sqlmap": {
+      "success": 0,
+      "failure": 4,
+      "avg_time": 0
+    },
+    "wafw00f": {
+      "success": 3,
+      "failure": 0,
+      "avg_time": 1.6622809569040935
+    },
+    "echo": {
+      "success": 5,
+      "failure": 0,
+      "avg_time": 0.17087368965148925
+    },
+    "python3": {
+      "success": 1,
+      "failure": 0,
+      "avg_time": 0.6784942150115967
+    }
+  },
+  "tech_stack_patterns": {},
+  "waf_bypass_tactics": {},
+  "failed_approaches": [
+    {
+      "approach": "ffuf",
+      "target": "http://novalink.lk",
+      "phase": "exploitation",
+      "reason": "tool_failure",
+      "timestamp": "2026-05-31T19:14:25.680264"
+    },
+    {
+      "approach": "curl",
+      "target": "https://dash.novalink.lk",
+      "phase": "exploitation",
+      "reason": "tool_failure",
+      "timestamp": "2026-06-03T04:11:49.743640"
+    },
+    {
+      "approach": "gobuster",
+      "target": "http://novalink.lk",
+      "phase": "recon",
+      "reason": "tool_failure",
+      "timestamp": "2026-06-03T18:13:25.712371"
+    },
+    {
+      "approach": "gobuster",
+      "target": "http://novalink.lk",
+      "phase": "recon",
+      "reason": "tool_failure",
+      "timestamp": "2026-06-03T19:27:26.144286"
+    },
+    {
+      "approach": "hydra",
+      "target": "novalink.lk",
+      "phase": "recon",
+      "reason": "tool_failure",
+      "timestamp": "2026-06-03T19:32:39.439106"
+    },
+    {
+      "approach": "sqlmap",
+      "target": "http://novalink.lk",
+      "phase": "recon",
+      "reason": "tool_failure",
+      "timestamp": "2026-06-03T19:35:13.608310"
+    },
+    {
+      "approach": "hydra",
+      "target": "novalink.lk",
+      "phase": "recon",
+      "reason": "tool_failure",
+      "timestamp": "2026-06-03T19:39:06.069558"
+    },
+    {
+      "approach": "hydra",
+      "target": "novalink.lk",
+      "phase": "recon",
+      "reason": "tool_failure",
+      "timestamp": "2026-06-03T19:54:04.961189"
+    },
+    {
+      "approach": "sqlmap",
+      "target": "http://novalink.lk",
+      "phase": "recon",
+      "reason": "tool_failure",
+      "timestamp": "2026-06-03T19:56:02.320697"
+    },
+    {
+      "approach": "gobuster",
+      "target": "http://novalink.lk",
+      "phase": "exploitation",
+      "reason": "tool_failure",
+      "timestamp": "2026-06-04T08:31:33.867205"
+    },
+    {
+      "approach": "ffuf",
+      "target": "http://novalink.lk",
+      "phase": "exploitation",
+      "reason": "tool_failure",
+      "timestamp": "2026-06-04T09:52:17.445650"
+    },
+    {
+      "approach": "sqlmap",
+      "target": "http://novalink.lk",
+      "phase": "exploitation",
+      "reason": "tool_failure",
+      "timestamp": "2026-06-04T10:31:30.447678"
+    },
+    {
+      "approach": "sqlmap",
+      "target": "http://novalink.lk",
+      "phase": "exploitation",
+      "reason": "tool_failure",
+      "timestamp": "2026-06-04T10:32:06.792587"
+    },
+    {
+      "approach": "httpx",
+      "target": "novalink.lk",
+      "phase": "recon",
+      "reason": "tool_failure",
+      "timestamp": "2026-06-13T06:15:19.651053+00:00"
+    },
+    {
+      "approach": "httpx",
+      "target": "novalink.lk",
+      "phase": "recon",
+      "reason": "tool_failure",
+      "timestamp": "2026-06-13T06:23:26.081623+00:00"
+    },
+    {
+      "approach": "gobuster",
+      "target": "http://novalink.lk",
+      "phase": "recon",
+      "reason": "tool_failure",
+      "timestamp": "2026-06-13T06:51:07.305486+00:00"
+    },
+    {
+      "approach": "sslscan",
+      "target": "http://novalink.lk",
+      "phase": "recon",
+      "reason": "tool_failure",
+      "timestamp": "2026-06-17T10:12:04.936667+00:00"
+    },
+    {
+      "approach": "gobuster",
+      "target": "http://novalink.lk",
+      "phase": "recon",
+      "reason": "tool_failure",
+      "timestamp": "2026-06-17T10:14:27.177736+00:00"
+    },
+    {
+      "approach": "nuclei",
+      "target": "novalink.lk",
+      "phase": "recon",
+      "reason": "tool_failure",
+      "timestamp": "2026-06-17T10:46:04.432761+00:00"
+    },
+    {
+      "approach": "nuclei",
+      "target": "novalink.lk",
+      "phase": "exploitation",
+      "reason": "tool_failure",
+      "timestamp": "2026-06-23T17:01:33.109463+00:00"
+    },
+    {
+      "approach": "nuclei",
+      "target": "novalink.lk",
+      "phase": "exploitation",
+      "reason": "tool_failure",
+      "timestamp": "2026-06-23T18:01:21.179723+00:00"
+    },
+    {
+      "approach": "nuclei",
+      "target": "novalink.lk",
+      "phase": "exploitation",
+      "reason": "tool_failure",
+      "timestamp": "2026-06-24T16:11:03.790783+00:00"
+    },
+    {
+      "approach": "nuclei",
+      "target": "novalink.lk",
+      "phase": "exploitation",
+      "reason": "tool_failure",
+      "timestamp": "2026-06-24T16:44:20.672608+00:00"
+    },
+    {
+      "approach": "nuclei",
+      "target": "novalink.lk",
+      "phase": "exploitation",
+      "reason": "tool_failure",
+      "timestamp": "2026-06-24T17:05:57.664279+00:00"
+    },
+    {
+      "approach": "nuclei",
+      "target": "novalink.lk",
+      "phase": "exploitation",
+      "reason": "tool_failure",
+      "timestamp": "2026-06-24T20:02:52.049803+00:00"
+    }
+  ],
+  "successful_pivots": [],
+  "discovery_patterns": {},
+  "engagement_summaries": []
+}

@@ -1,0 +1,101 @@
+{
+  "timestamp": "2026-05-27T09:17:59.923213",
+  "engagement_id": "eng_2b07106a",
+  "changes": {
+    "tool_effectiveness": {
+      "tool_rates_adjusted": {
+        "nmap": {
+          "success_rate": 0.75,
+          "priority": 0.6000000000000001,
+          "total_runs": 4,
+          "avg_duration": 157.54103749990463,
+          "recommendation": "effective"
+        },
+        "nikto": {
+          "success_rate": 0.0,
+          "priority": 0.0,
+          "total_runs": 2,
+          "avg_duration": 2.0621488094329834,
+          "recommendation": "never_works"
+        },
+        "gobuster": {
+          "success_rate": 0.5,
+          "priority": 0.5,
+          "total_runs": 4,
+          "avg_duration": 54.537206411361694,
+          "recommendation": "moderate"
+        },
+        "dig": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 4,
+          "avg_duration": 0.36039477586746216,
+          "recommendation": "highly_effective"
+        }
+      },
+      "tool_order_changed": false,
+      "reasoning": [
+        "Tool 'dig' highly effective (100% success) - prioritize"
+      ]
+    },
+    "finding_confidence": {
+      "confidence_adjustments": {},
+      "high_confidence_techs": [],
+      "reasoning": []
+    },
+    "timeouts": {
+      "timeout_adjustments": {},
+      "reasoning": []
+    },
+    "waf_handling": {
+      "waf_rules": {
+        "generic_waf": {
+          "tools_to_avoid": [
+            "gobuster"
+          ],
+          "tools_to_use": [
+            "curl",
+            "dig",
+            "nmap",
+            "gobuster",
+            "subfinder",
+            "whatweb"
+          ],
+          "recommended_order": [
+            "dig",
+            "nmap",
+            "gobuster",
+            "curl",
+            "subfinder",
+            "whatweb"
+          ]
+        }
+      },
+      "blocked_tools": {},
+      "effective_tools": {},
+      "reasoning": [
+        "WAF 'generic_waf' blocks: gobuster - skip these tools",
+        "Against generic_waf, use: curl, dig, nmap"
+      ]
+    }
+  },
+  "recommendations": [
+    {
+      "type": "waf_bypass_strategy",
+      "waf": "generic_waf",
+      "tools_to_use": [
+        "curl",
+        "nmap",
+        "subfinder",
+        "whatweb",
+        "dig"
+      ],
+      "tools_to_avoid": [
+        "gobuster"
+      ],
+      "priority": "high",
+      "reasoning": "Against generic_waf, prioritize curl, nmap, subfinder, whatweb, dig"
+    }
+  ],
+  "rollback_data": {}
+}

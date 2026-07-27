@@ -1,0 +1,50 @@
+# Ghostwire V6 Tool Configuration
+# Centralized URLs and tool-specific settings
+
+urls:
+  seclists: "https://github.com/danielmiessler/SecLists.git"
+  nuclei_api: "https://api.github.com/repos/projectdiscovery/nuclei/releases/latest"
+  nuclei_download: "https://github.com/projectdiscovery/nuclei/releases/download"
+  ffuf_api: "https://api.github.com/repos/ffuf/ffuf/releases/latest"
+  ffuf_download: "https://github.com/ffuf/ffuf/releases/download"
+  msf_update: "https://raw.githubusercontent.com/rapid7/metasploit-omnibus/master/config/templates/metasploit-framework-wrappers/msfupdate.erb"
+  theharvester: "https://github.com/laramies/theHarvester.git"
+  subfinder_api: "https://api.github.com/repos/projectdiscovery/subfinder/releases/latest"
+  subfinder_download: "https://github.com/projectdiscovery/subfinder/releases/download"
+  curl_impersonate: "https://github.com/lwthiker/curl-impersonate/releases/download/v0.6.1/curl-impersonate-v0.6.1.x86_64-linux-gnu.tar.gz"
+  dalfox_api: "https://api.github.com/repos/hahwul/dalfox/releases/latest"
+  dalfox_download: "https://github.com/hahwul/dalfox/releases/download"
+  amass_api: "https://api.github.com/repos/owasp-amass/amass/releases/latest"
+  amass_download: "https://github.com/owasp-amass/amass/releases/download"
+
+fallbacks:
+  amass_version: "4.2.0"
+  subfinder_version: "2.6.6"
+  nuclei_version: "3.2.9"
+  ffuf_version: "2.1.0"
+
+unreliable_help_tools:
+  - grep
+  - awk
+  - sed
+  - bash
+  - sh
+  - python
+  - python3
+  - perl
+  - ruby
+  - echo
+  - cat
+  - ls
+  - find
+
+wildcard_tuning:
+  gobuster:
+    status_code_flag: "-b"
+    status_code_base: "404"
+    length_flag: "--exclude-length"
+  ffuf:
+    status_code_flag: "-fc"
+    length_flag: "-fs"
+    length_range_offset: 30
+    extra_flags: " -t 5 -ac"

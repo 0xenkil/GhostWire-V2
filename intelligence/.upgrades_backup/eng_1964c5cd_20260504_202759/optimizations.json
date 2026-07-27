@@ -1,0 +1,173 @@
+{
+  "timestamp": "2026-05-04T20:27:59.168851",
+  "engagement_id": "eng_1964c5cd",
+  "changes": {
+    "tool_effectiveness": {
+      "tool_rates_adjusted": {
+        "nikto": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 3,
+          "avg_duration": 1.4507149855295818,
+          "recommendation": "highly_effective"
+        },
+        "dig": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 35,
+          "avg_duration": 0.23877912248883928,
+          "recommendation": "highly_effective"
+        },
+        "ai_dynamic_recon": {
+          "success_rate": 0.0,
+          "priority": 0.0,
+          "total_runs": 4,
+          "avg_duration": 0.165807843208313,
+          "recommendation": "never_works"
+        },
+        "nuclei": {
+          "success_rate": 1.0,
+          "priority": 0.8,
+          "total_runs": 3,
+          "avg_duration": 125.78991778691609,
+          "recommendation": "highly_effective"
+        },
+        "gobuster": {
+          "success_rate": 0.16666666666666666,
+          "priority": 0.16666666666666666,
+          "total_runs": 6,
+          "avg_duration": 7.1468931833903,
+          "recommendation": "unreliable"
+        },
+        "hydra": {
+          "success_rate": 0.0,
+          "priority": 0.0,
+          "total_runs": 2,
+          "avg_duration": 1.6778435707092285,
+          "recommendation": "never_works"
+        },
+        "masscan": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 4,
+          "avg_duration": 108.15693098306656,
+          "recommendation": "highly_effective"
+        },
+        "nmap": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 2,
+          "avg_duration": 3.754234790802002,
+          "recommendation": "highly_effective"
+        },
+        "ffuf": {
+          "success_rate": 0.6666666666666666,
+          "priority": 0.6666666666666666,
+          "total_runs": 3,
+          "avg_duration": 12.07265019416809,
+          "recommendation": "moderate"
+        },
+        "wget": {
+          "success_rate": 0.5384615384615384,
+          "priority": 0.5384615384615384,
+          "total_runs": 13,
+          "avg_duration": 2.4967921513777513,
+          "recommendation": "moderate"
+        },
+        "curl": {
+          "success_rate": 0.6481481481481481,
+          "priority": 0.6481481481481481,
+          "total_runs": 54,
+          "avg_duration": 4.792488354223746,
+          "recommendation": "moderate"
+        }
+      },
+      "tool_order_changed": false,
+      "reasoning": [
+        "Tool 'nikto' highly effective (100% success) - prioritize",
+        "Tool 'dig' highly effective (100% success) - prioritize",
+        "Tool 'ai_dynamic_recon' has 0% success rate after 4 runs - consider removing",
+        "Tool 'nuclei' highly effective (100% success) - prioritize",
+        "Tool 'masscan' highly effective (100% success) - prioritize",
+        "Tool 'nmap' highly effective (100% success) - prioritize"
+      ]
+    },
+    "finding_confidence": {
+      "confidence_adjustments": {},
+      "high_confidence_techs": [
+        {
+          "technology": "cloudflare",
+          "confidence": 0.95,
+          "reasoning": "Found 3 times in engagement"
+        }
+      ],
+      "reasoning": [
+        "Technology 'cloudflare' appears reliably (3 times)"
+      ]
+    },
+    "timeouts": {
+      "timeout_adjustments": {},
+      "reasoning": []
+    },
+    "waf_handling": {
+      "waf_rules": {
+        "cloudflare": {
+          "tools_to_avoid": [],
+          "tools_to_use": [
+            "curl",
+            "dig",
+            "theharvester",
+            "subfinder",
+            "gobuster",
+            "wget",
+            "masscan",
+            "nmap",
+            "wafw00f",
+            "nikto",
+            "ffuf",
+            "nuclei"
+          ],
+          "recommended_order": [
+            "curl",
+            "dig",
+            "wget",
+            "masscan",
+            "nikto",
+            "nuclei",
+            "nmap",
+            "ffuf",
+            "theharvester",
+            "subfinder",
+            "gobuster",
+            "wafw00f"
+          ],
+          "top_evasion_vectors": []
+        }
+      },
+      "blocked_tools": {},
+      "effective_tools": {},
+      "evasion_priorities": {},
+      "reasoning": [
+        "Against cloudflare, use: curl, dig, theharvester"
+      ]
+    }
+  },
+  "recommendations": [
+    {
+      "type": "waf_defense_policy",
+      "waf": "cloudflare",
+      "tools_to_avoid": [],
+      "priority": "high",
+      "reasoning": "cloudflare detected - keep validation low-rate, record block evidence, and stop commands that trigger WAF/rate-limit/CAPTCHA responses"
+    },
+    {
+      "type": "skip_ineffective_tools",
+      "tools": [
+        "ai_dynamic_recon"
+      ],
+      "priority": "medium",
+      "reasoning": "Tools ['ai_dynamic_recon'] never succeeded - consider skipping on similar targets"
+    }
+  ],
+  "rollback_data": {}
+}

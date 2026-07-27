@@ -1,0 +1,28 @@
+[
+  {
+    "type": "waf_bypass_strategy",
+    "waf": "generic_waf",
+    "tools_to_use": [
+      "nmap",
+      "subfinder",
+      "dig",
+      "curl",
+      "whatweb",
+      "sslscan",
+      "nikto"
+    ],
+    "tools_to_avoid": [
+      "ffuf"
+    ],
+    "priority": "high",
+    "reasoning": "Against generic_waf, prioritize nmap, subfinder, dig, curl, whatweb, sslscan, nikto"
+  },
+  {
+    "type": "skip_ineffective_tools",
+    "tools": [
+      "ffuf"
+    ],
+    "priority": "medium",
+    "reasoning": "Tools ['ffuf'] never succeeded - consider skipping on similar targets"
+  }
+]

@@ -1,0 +1,14 @@
+{
+  "engagement_id": "eng_a4345f6f",
+  "timestamp": "2026-06-20T00:49:12.729561",
+  "rules": {
+    "exploitation": [],
+    "infrastructure": [],
+    "recon": [],
+    "weaponization": []
+  },
+  "generated_from_patterns": [
+    "Perfect tools (100% success): subfinder, httpx, dig",
+    "Never-successful tools: nikto, git, ffuf"
+  ]
+}

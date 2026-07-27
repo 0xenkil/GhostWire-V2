@@ -5,6 +5,7 @@ from utils.logger import get_logger
 
 log = get_logger("message_bus")
 
+
 class MessageBus:
     def __init__(self, state_store, engagement_id: str):
         self._subscribers: dict[str, list[Callable]] = defaultdict(list)
@@ -38,12 +39,13 @@ class MessageBus:
                 log.error(traceback.format_exc())
 
     def request_reply(self, from_agent: str, to_agent: str, payload: dict,
-                       reply_handler: Callable, timeout: float = 30.0):
+                      reply_handler: Callable, timeout: float = 30.0):
         """
         Send a message and wait for a reply on a temporary reply channel.
         Used when an agent needs a response from another agent.
         """
-        import threading, uuid
+        import threading
+        import uuid
         reply_channel = f"reply_{uuid.uuid4().hex[:8]}"
         result = {}
         event = threading.Event()

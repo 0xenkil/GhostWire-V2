@@ -1,0 +1,11 @@
+{
+    "theharvester_sources": "duckduckgo,hackertarget,otx,rapiddns,virustotal,crtsh",
+    "seclist_subdomains_url": "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Discovery/Web-Content/subdomains-top1million-5000.txt",
+    "max_subdomains_to_verify": 100,
+    "wildcard_canary_prefix": "xzq99canary99xzq",
+    "masscan_rate": 300,
+    "masscan_port_range": "1-10000",
+    "nmap_flags": "-sV -sC -O --max-rtt-timeout 2s --max-retries 1",
+    "resolver_dns": "1.1.1.1",
+    "core_tools": ["masscan", "dig", "subfinder", "theHarvester", "amass"]
+}

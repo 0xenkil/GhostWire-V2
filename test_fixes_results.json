@@ -1,0 +1,64 @@
+{
+  "test_start": "2026-06-04T06:16:06.708196",
+  "fixes_tested": [
+    {
+      "name": "FIX 1.1: Exception Handling",
+      "status": "PASS"
+    },
+    {
+      "name": "FIX 1.2: Return Validation",
+      "status": "PASS"
+    },
+    {
+      "name": "FIX 1.3: JSON Parsing",
+      "status": "PASS"
+    },
+    {
+      "name": "FIX 1.4: State Validation",
+      "status": "PASS"
+    },
+    {
+      "name": "FIX 2.1: Async Wordlist",
+      "status": "PASS"
+    },
+    {
+      "name": "FIX 2.2: Tool Fallbacks",
+      "status": "PASS"
+    },
+    {
+      "name": "FIX 2.3: Phase Gates",
+      "status": "PASS"
+    },
+    {
+      "name": "FIX 2.4: Timeout Escalation",
+      "status": "PASS"
+    },
+    {
+      "name": "FIX 2.5: Evidence Type Safety",
+      "status": "PASS"
+    },
+    {
+      "name": "FIX 3.1: Hardcoded Credentials",
+      "status": "PASS"
+    },
+    {
+      "name": "FIX 3.3: SSH Timeout",
+      "status": "PASS"
+    },
+    {
+      "name": "FIX 3.4: AI Backend Validation",
+      "status": "PASS"
+    },
+    {
+      "name": "FIX 3.5: Thread Safety",
+      "status": "PASS"
+    },
+    {
+      "name": "FIX 3.6: Result Validation",
+      "status": "PASS"
+    }
+  ],
+  "fixes_passed": 14,
+  "fixes_failed": 0,
+  "test_end": "2026-06-04T06:16:11.369455"
+}

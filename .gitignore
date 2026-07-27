@@ -1,8 +1,65 @@
+# Environments & API Keys
 .env
+.env.local
+*.env
+.venv/
+env/
+venv/
+
+# Results & Logs
 results/
 logs/
 *.log
+clean_log*.txt
+cleaned_log*.txt
+parsed_cli.txt
+parsed_log.txt
+last ran*.txt
+last_ran*.txt
+my_messages.txt
+clean_messages.txt
+errors*.txt
+failures*.txt
+findings*.txt
+all_chats_compiled.txt
+all_subscripts.txt
+all_summaries_concat.txt
+compressed_chunk.txt
+filtered_blocks.txt
+extracted_*.txt
+deep_audit_results.txt
+flake8_*.txt
+flake8_*.log
+real_integration_test.log
+live_run_novalink.log
+debug*.log
+subagent_results.txt
+medium_mentions.txt
+comp_*.txt
+wrapped_summaries.txt
+
+# Databases & Cache
+*.db
+*.sqlite
+*.sqlite3
 __pycache__/
-.pytest_cache/
-.DS_Store
 *.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.agents/
+.claude/
+.cursor/
+.vscode/
+
+# OS / Binary artifacts
+.DS_Store
+*.deb
+*.tar.gz
+*.zip
+test-shm
+test-wal
+test_campaign-shm
+test_campaign-wal
+test
+test_campaign

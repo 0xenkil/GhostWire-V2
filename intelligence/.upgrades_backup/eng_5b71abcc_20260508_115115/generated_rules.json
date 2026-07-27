@@ -1,0 +1,39 @@
+{
+  "engagement_id": "eng_5b71abcc",
+  "timestamp": "2026-05-08T11:51:15.429103",
+  "rules": {
+    "exploitation": [],
+    "infrastructure": [
+      {
+        "id": "waf_generic_waf_handling",
+        "name": "Handle generic_waf WAF",
+        "type": "waf_detection",
+        "condition": {
+          "waf_detected": "generic_waf"
+        },
+        "actions": {
+          "skip_tools": [],
+          "prefer_tools": [
+            "dig",
+            "nmap",
+            "whatweb",
+            "subfinder",
+            "nikto",
+            "sqlmap"
+          ],
+          "set_timeout": 45,
+          "use_evasion": true
+        },
+        "confidence": 0.9,
+        "source": "engagement_eng_5b71abcc"
+      }
+    ],
+    "recon": [],
+    "weaponization": []
+  },
+  "generated_from_patterns": [
+    "Perfect tools (100% success): nikto, whatweb, nmap, subfinder, dig",
+    "Never-successful tools: nuclei, gobuster, dirb, curl",
+    "Pattern: generic_waf WAF detection"
+  ]
+}

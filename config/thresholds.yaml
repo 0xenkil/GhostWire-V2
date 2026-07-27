@@ -1,0 +1,101 @@
+tool_timeouts:
+  default: 120
+  nmap: 600
+  nuclei: 2400
+  ffuf: 1200
+  gobuster: 900
+  masscan: 1800
+  nikto: 600
+  curl: 30
+  ai: 180
+  metasploit: 600
+  waf: 120
+
+tls_settings:
+  handshake_timeout: 10
+  breaker_max_retries: 5
+  cipher_suite_timeout: 2
+
+phase_timeouts:
+  planning: 300
+  recon: 1800
+  weaponization: 600
+  exploitation: 1200
+  persistence: 600
+  objectives: 600
+  reporting: 300
+
+retries:
+  max_command_retries: 3
+  max_exploit_attempts: 5
+  max_poc_execution_retries: 2
+  max_self_heal_retries: 2
+
+backoff:
+  rate_limit_base: 5
+  rate_limit_max: 120
+
+circuit_breaker:
+  threshold: 3
+  reset_timeout: 300
+
+delays:
+  waf_between_commands: 3
+  waf_between_requests: 0.5
+  poc_execution: 1
+
+limits:
+  max_response_size: 5242880  # 5MB
+  max_payload_size: 1048576   # 1MB
+  max_command_output_lines: 1000
+
+confidence_thresholds:
+  high: 0.75
+  medium: 0.50
+  low: 0.30
+
+value_score_thresholds:
+  high: 0.70
+  medium: 0.50
+
+port_scanning:
+  timeout_per_host: 120
+  thread_count: 100
+  max_ports: 10000
+
+health_thresholds:
+  host_max_consecutive_errors: 3
+  host_max_total_errors: 15
+  vps_check_interval: 60
+  vps_check_timeout: 5
+
+honeypot_detection:
+  port_threshold: 50
+  similarity_threshold: 0.95
+
+ai_config:
+  request_timeout: 60
+  max_retries: 3
+  temperature: 0.7
+  top_p: 0.9
+
+exploitation_config:
+  max_commands: 5
+  min_success_rate: 0.20
+
+nuclei_config:
+  rate_limit: 150
+  concurrency: 25
+  timeout: 10
+
+cache_expiry:
+  tool_mins: 5
+  finding_mins: 10
+
+display:
+  max_live_lines: 200
+  max_summary_lines: 50
+
+network_conditions:
+  slow_timeout_multiplier: 2.0
+  slow_delay_multiplier: 2.0

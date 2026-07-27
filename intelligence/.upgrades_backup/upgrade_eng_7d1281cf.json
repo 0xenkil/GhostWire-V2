@@ -1,0 +1,36 @@
+{
+  "engagement_id": "eng_7d1281cf",
+  "timestamp": "2026-05-06T14:30:37.686169",
+  "dry_run": false,
+  "status": "complete",
+  "phases": {
+    "analysis": {
+      "status": "complete",
+      "insights_extracted": 1,
+      "findings_count": 0
+    },
+    "optimization": {
+      "status": "complete",
+      "tool_adjustments": 0,
+      "timeout_changes": 0
+    },
+    "rule_generation": {
+      "status": "complete",
+      "exploitation_rules": 0,
+      "infrastructure_rules": 0
+    },
+    "validation": {
+      "status": "complete",
+      "valid_changes": 0,
+      "rejected_changes": 0
+    },
+    "application": {
+      "status": "skipped",
+      "reason": "no_valid_changes"
+    }
+  },
+  "changes_applied": [],
+  "changes_rejected": [],
+  "validation_errors": [],
+  "rollback_capability": false
+}

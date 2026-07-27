@@ -1,0 +1,35 @@
+ai_backends:
+  ollama:
+    base_url: "http://localhost:11434"
+    timeout: 30
+    model: "huihui_ai/gemma-4-abliterated:e4b-q8_0"
+    num_thread: 4
+    keep_alive: "0"
+    num_ctx: 2048
+  groq:
+    model: "llama-3.3-70b-versatile"
+    groq_model: "llama-3.3-70b-versatile"
+    fallback_model: "llama-3.1-8b-instant"
+  google:
+    model: "gemini-3.1-flash-lite"
+  openrouter:
+    model: ""
+
+proxy_settings:
+  url: "socks5h://127.0.0.1:9050"
+  timeout: 10
+  tor_socks_port: 9050
+  tor_control_port: 9051
+  tor_enabled: false
+
+vps_defaults:
+  port: 22
+  username: "root"
+
+oob_settings:
+  collaborator_domain: "collaborator.oob"
+
+security_api_keys: {}
+
+vps_credentials:
+  username: "root"

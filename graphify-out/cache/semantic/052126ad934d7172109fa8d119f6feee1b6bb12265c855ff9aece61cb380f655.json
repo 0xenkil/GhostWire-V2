@@ -1,0 +1,1 @@
+{"nodes": [], "edges": [{"source": "ai_intelligence_readme_strategic_advisor", "target": "ai_intelligence_readme_strategic_knowledge", "relation": "references", "confidence": "EXTRACTED", "confidence_score": 1.0, "source_file": "AI_INTELLIGENCE_README.md", "source_location": null, "weight": 1.0}], "hyperedges": []}

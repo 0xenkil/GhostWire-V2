@@ -1,0 +1,140 @@
+{
+  "Misconfiguration": {
+    "predictions": [
+      0.7
+    ],
+    "outcomes": [
+      0
+    ],
+    "calibration_error": 0
+  },
+  "Information Disclosure": {
+    "predictions": [
+      0.6,
+      0.8,
+      0.6
+    ],
+    "outcomes": [
+      0,
+      0,
+      0
+    ],
+    "calibration_error": 0.6666666666666666
+  },
+  "Insecure Direct Object Reference (IDOR)": {
+    "predictions": [
+      0.5
+    ],
+    "outcomes": [
+      0
+    ],
+    "calibration_error": 0
+  },
+  "Server-Side Request Forgery (SSRF)": {
+    "predictions": [
+      0.4
+    ],
+    "outcomes": [
+      0
+    ],
+    "calibration_error": 0
+  },
+  "Insecure Configuration": {
+    "predictions": [
+      0.5
+    ],
+    "outcomes": [
+      0
+    ],
+    "calibration_error": 0
+  },
+  "Server Misconfiguration": {
+    "predictions": [
+      0.4
+    ],
+    "outcomes": [
+      0
+    ],
+    "calibration_error": 0
+  },
+  "novel-logic": {
+    "predictions": [
+      0.4,
+      0.2,
+      0.8,
+      0.5
+    ],
+    "outcomes": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "calibration_error": 0.47500000000000003
+  },
+  "SSRF": {
+    "predictions": [
+      0.3
+    ],
+    "outcomes": [
+      0
+    ],
+    "calibration_error": 0
+  },
+  "IDOR": {
+    "predictions": [
+      0.2,
+      0.7
+    ],
+    "outcomes": [
+      0,
+      0
+    ],
+    "calibration_error": 0
+  },
+  "insecure deserialization": {
+    "predictions": [
+      0.1
+    ],
+    "outcomes": [
+      0
+    ],
+    "calibration_error": 0
+  },
+  "misconfiguration": {
+    "predictions": [
+      0.1
+    ],
+    "outcomes": [
+      0
+    ],
+    "calibration_error": 0
+  },
+  "Broken Access Control": {
+    "predictions": [
+      0.9
+    ],
+    "outcomes": [
+      0
+    ],
+    "calibration_error": 0
+  },
+  "secrets exposure": {
+    "predictions": [
+      0.8
+    ],
+    "outcomes": [
+      0
+    ],
+    "calibration_error": 0
+  },
+  "file handling": {
+    "predictions": [
+      0.6
+    ],
+    "outcomes": [
+      0
+    ],
+    "calibration_error": 0
+  }
+}

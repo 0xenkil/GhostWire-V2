@@ -1,0 +1,109 @@
+{
+  "timestamp": "2026-05-23T15:42:41.847163",
+  "engagement_id": "eng_0df87907",
+  "changes": {
+    "tool_effectiveness": {
+      "tool_rates_adjusted": {
+        "wfuzz": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 4,
+          "avg_duration": 0.5932068228721619,
+          "recommendation": "highly_effective"
+        },
+        "ssh_cmd": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 9,
+          "avg_duration": 0.41166279051038956,
+          "recommendation": "highly_effective"
+        },
+        "nmap": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 5,
+          "avg_duration": 93.3398051738739,
+          "recommendation": "highly_effective"
+        },
+        "dig": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 4,
+          "avg_duration": 0.33298879861831665,
+          "recommendation": "highly_effective"
+        },
+        "nikto": {
+          "success_rate": 0.6666666666666666,
+          "priority": 0.6666666666666666,
+          "total_runs": 6,
+          "avg_duration": 75.94911913077037,
+          "recommendation": "moderate"
+        }
+      },
+      "tool_order_changed": false,
+      "reasoning": [
+        "Tool 'wfuzz' highly effective (100% success) - prioritize",
+        "Tool 'ssh_cmd' highly effective (100% success) - prioritize",
+        "Tool 'nmap' highly effective (100% success) - prioritize",
+        "Tool 'dig' highly effective (100% success) - prioritize"
+      ]
+    },
+    "finding_confidence": {
+      "confidence_adjustments": {},
+      "high_confidence_techs": [],
+      "reasoning": []
+    },
+    "timeouts": {
+      "timeout_adjustments": {},
+      "reasoning": []
+    },
+    "waf_handling": {
+      "waf_rules": {
+        "generic_waf": {
+          "tools_to_avoid": [],
+          "tools_to_use": [
+            "ssh_cmd",
+            "dig",
+            "nmap",
+            "whatweb",
+            "subfinder",
+            "wfuzz",
+            "sslscan",
+            "nikto",
+            "ffuf",
+            "curl"
+          ],
+          "recommended_order": [
+            "ssh_cmd",
+            "nmap",
+            "dig",
+            "wfuzz",
+            "nikto",
+            "whatweb",
+            "subfinder",
+            "sslscan",
+            "ffuf",
+            "curl"
+          ],
+          "top_evasion_vectors": []
+        }
+      },
+      "blocked_tools": {},
+      "effective_tools": {},
+      "evasion_priorities": {},
+      "reasoning": [
+        "Against generic_waf, use: ssh_cmd, dig, nmap"
+      ]
+    }
+  },
+  "recommendations": [
+    {
+      "type": "waf_defense_policy",
+      "waf": "generic_waf",
+      "tools_to_avoid": [],
+      "priority": "high",
+      "reasoning": "generic_waf detected - keep validation low-rate, record block evidence, and stop commands that trigger WAF/rate-limit/CAPTCHA responses"
+    }
+  ],
+  "rollback_data": {}
+}

@@ -1,0 +1,89 @@
+{
+  "test_start": "2026-05-31T20:55:34.101180",
+  "scenarios": [
+    {
+      "name": "Simple HTTP localhost (pentest)",
+      "target": "http://127.0.0.1:8080",
+      "phases": {
+        "planning": {
+          "status": "pass",
+          "duration": 4.790868759155273,
+          "error": null,
+          "result": "<coroutine object PlanningAgent.run at 0x000001A2DEAD5BE0>"
+        },
+        "recon": {
+          "status": "pass",
+          "duration": 0.11868572235107422,
+          "error": null,
+          "result": "<coroutine object ReconAgent.run at 0x000001A2DBF0AF10>"
+        },
+        "exploitation": {
+          "status": "pass",
+          "duration": 10.477345705032349,
+          "error": null,
+          "result": {
+            "preflight_443": {
+              "status": "curl_blocked"
+            },
+            "preflight_80": {
+              "status": "curl_blocked"
+            }
+          }
+        },
+        "reporting": {
+          "status": "pass",
+          "duration": 0.1255960464477539,
+          "error": null,
+          "result": "<coroutine object ReportingAgent.run at 0x000001A2DC709530>"
+        }
+      },
+      "overall_status": "pass",
+      "total_duration": 15.518637895584106
+    },
+    {
+      "name": "HTTPS localhost (pentest)",
+      "target": "https://127.0.0.1:8443",
+      "phases": {
+        "planning": {
+          "status": "pass",
+          "duration": 0.11315798759460449,
+          "error": null,
+          "result": "<coroutine object PlanningAgent.run at 0x000001A2DEAD60C0>"
+        },
+        "recon": {
+          "status": "pass",
+          "duration": 0.10821723937988281,
+          "error": null,
+          "result": "<coroutine object ReconAgent.run at 0x000001A2DBF0B360>"
+        },
+        "exploitation": {
+          "status": "pass",
+          "duration": 10.616947889328003,
+          "error": null,
+          "result": {
+            "preflight_443": {
+              "status": "curl_blocked"
+            },
+            "preflight_80": {
+              "status": "curl_blocked"
+            }
+          }
+        },
+        "reporting": {
+          "status": "pass",
+          "duration": 0.11085772514343262,
+          "error": null,
+          "result": "<coroutine object ReportingAgent.run at 0x000001A2DC709870>"
+        }
+      },
+      "overall_status": "pass",
+      "total_duration": 10.95700216293335
+    }
+  ],
+  "summary": {
+    "total": 2,
+    "passed": 2,
+    "failed": 0,
+    "success_rate_pct": 100.0
+  }
+}

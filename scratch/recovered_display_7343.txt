@@ -1,0 +1,1 @@
+"        f\"     [bold white]GHOSTWIRE V7[/]  [bold {C_DIM}]//[/] [bold #a9b1d6]Universal Autonomous Penetration Testing Engine[/]\\n\"\n        f\"    [bold {C_DIM}]System Core // v7.0.0[/]\\n\""

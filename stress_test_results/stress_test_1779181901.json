@@ -1,0 +1,393 @@
+{
+  "test_start": "2026-05-19T14:41:06.464431",
+  "scenarios": [
+    {
+      "scenario": "Simple HTTP Target - No WAF",
+      "target": "http://example-simple.local",
+      "difficulty": "easy",
+      "phases": {
+        "planning": {
+          "status": "pass",
+          "duration": 0.20066285133361816,
+          "error": null,
+          "tools_used": 8
+        },
+        "recon": {
+          "status": "pass",
+          "duration": 0.502936601638794,
+          "error": null,
+          "tools_used": 11
+        },
+        "scanning": {
+          "status": "pass",
+          "duration": 0.8007593154907227,
+          "error": null,
+          "tools_used": 4
+        },
+        "exploitation": {
+          "status": "pass",
+          "duration": 1.000560998916626,
+          "error": null,
+          "tools_used": 6
+        },
+        "persistence": {
+          "status": "pass",
+          "duration": 0.3015120029449463,
+          "error": null,
+          "tools_used": 9
+        }
+      },
+      "overall_status": "pass",
+      "total_duration": 2.8525123596191406
+    },
+    {
+      "scenario": "Hardened HTTPS - Cloudflare WAF",
+      "target": "https://cloudflare-protected.local",
+      "difficulty": "hard",
+      "phases": {
+        "planning": {
+          "status": "pass",
+          "duration": 0.3001713752746582,
+          "error": null,
+          "tools_used": 9
+        },
+        "recon": {
+          "status": "pass",
+          "duration": 0.7506759166717529,
+          "error": null,
+          "tools_used": 6
+        },
+        "scanning": {
+          "status": "fail",
+          "duration": 1.20046067237854,
+          "error": "WAF blocking all probes",
+          "tools_used": 0
+        },
+        "exploitation": {
+          "status": "fail",
+          "duration": 1.5023314952850342,
+          "error": "No exploitable vulnerabilities found",
+          "tools_used": 0
+        }
+      },
+      "overall_status": "fail",
+      "total_duration": 3.7701032161712646
+    },
+    {
+      "scenario": "API Target - JWT Auth",
+      "target": "https://api.example.local",
+      "difficulty": "medium",
+      "phases": {
+        "planning": {
+          "status": "pass",
+          "duration": 0.24019861221313477,
+          "error": null,
+          "tools_used": 7
+        },
+        "recon": {
+          "status": "pass",
+          "duration": 0.6002423763275146,
+          "error": null,
+          "tools_used": 10
+        },
+        "scanning": {
+          "status": "fail",
+          "duration": 0.9605412483215332,
+          "error": "WAF blocking all probes",
+          "tools_used": 0
+        },
+        "exploitation": {
+          "status": "pass",
+          "duration": 1.2005388736724854,
+          "error": null,
+          "tools_used": 11
+        }
+      },
+      "overall_status": "fail",
+      "total_duration": 3.0251097679138184
+    },
+    {
+      "scenario": "Database-Heavy Application",
+      "target": "https://db-app.example.local",
+      "difficulty": "medium",
+      "phases": {
+        "planning": {
+          "status": "pass",
+          "duration": 0.26050710678100586,
+          "error": null,
+          "tools_used": 10
+        },
+        "recon": {
+          "status": "pass",
+          "duration": 0.6508429050445557,
+          "error": null,
+          "tools_used": 5
+        },
+        "scanning": {
+          "status": "pass",
+          "duration": 1.0405077934265137,
+          "error": null,
+          "tools_used": 7
+        },
+        "exploitation": {
+          "status": "pass",
+          "duration": 1.300126075744629,
+          "error": null,
+          "tools_used": 5
+        },
+        "persistence": {
+          "status": "pass",
+          "duration": 0.39018917083740234,
+          "error": null,
+          "tools_used": 12
+        }
+      },
+      "overall_status": "pass",
+      "total_duration": 3.6640663146972656
+    },
+    {
+      "scenario": "Microservices Stack - ModSecurity WAF",
+      "target": "https://microservices.example.local",
+      "difficulty": "hard",
+      "phases": {
+        "planning": {
+          "status": "pass",
+          "duration": 0.30024194717407227,
+          "error": null,
+          "tools_used": 9
+        },
+        "recon": {
+          "status": "pass",
+          "duration": 0.7503743171691895,
+          "error": null,
+          "tools_used": 8
+        },
+        "scanning": {
+          "status": "pass",
+          "duration": 1.2020301818847656,
+          "error": null,
+          "tools_used": 8
+        },
+        "exploitation": {
+          "status": "pass",
+          "duration": 1.5005559921264648,
+          "error": null,
+          "tools_used": 7
+        }
+      },
+      "overall_status": "pass",
+      "total_duration": 3.776431083679199
+    },
+    {
+      "scenario": "Legacy PHP Application",
+      "target": "http://legacy-app.local",
+      "difficulty": "easy",
+      "phases": {
+        "planning": {
+          "status": "pass",
+          "duration": 0.20042634010314941,
+          "error": null,
+          "tools_used": 9
+        },
+        "recon": {
+          "status": "pass",
+          "duration": 0.5001344680786133,
+          "error": null,
+          "tools_used": 9
+        },
+        "scanning": {
+          "status": "pass",
+          "duration": 0.8001883029937744,
+          "error": null,
+          "tools_used": 3
+        },
+        "exploitation": {
+          "status": "fail",
+          "duration": 1.000551462173462,
+          "error": "No exploitable vulnerabilities found",
+          "tools_used": 0
+        },
+        "persistence": {
+          "status": "pass",
+          "duration": 0.3004589080810547,
+          "error": null,
+          "tools_used": 3
+        }
+      },
+      "overall_status": "fail",
+      "total_duration": 2.8204457759857178
+    },
+    {
+      "scenario": "AWS Target - Rate Limiting",
+      "target": "https://aws-app.example.local",
+      "difficulty": "hard",
+      "phases": {
+        "planning": {
+          "status": "pass",
+          "duration": 0.40046119689941406,
+          "error": null,
+          "tools_used": 7
+        },
+        "recon": {
+          "status": "pass",
+          "duration": 1.0003490447998047,
+          "error": null,
+          "tools_used": 8
+        },
+        "scanning": {
+          "status": "fail",
+          "duration": 1.6001570224761963,
+          "error": "WAF blocking all probes",
+          "tools_used": 0
+        },
+        "exploitation": {
+          "status": "fail",
+          "duration": 2.000147819519043,
+          "error": "No exploitable vulnerabilities found",
+          "tools_used": 0
+        }
+      },
+      "overall_status": "fail",
+      "total_duration": 5.018488645553589
+    },
+    {
+      "scenario": "Node.js REST API",
+      "target": "https://nodejs-api.local",
+      "difficulty": "medium",
+      "phases": {
+        "planning": {
+          "status": "pass",
+          "duration": 0.22014117240905762,
+          "error": null,
+          "tools_used": 4
+        },
+        "recon": {
+          "status": "pass",
+          "duration": 0.5503883361816406,
+          "error": null,
+          "tools_used": 10
+        },
+        "scanning": {
+          "status": "pass",
+          "duration": 0.8802835941314697,
+          "error": null,
+          "tools_used": 6
+        },
+        "exploitation": {
+          "status": "pass",
+          "duration": 1.1002929210662842,
+          "error": null,
+          "tools_used": 8
+        }
+      },
+      "overall_status": "pass",
+      "total_duration": 2.765338182449341
+    },
+    {
+      "scenario": "Docker Container - Internal Network",
+      "target": "http://internal-container.local:8080",
+      "difficulty": "easy",
+      "phases": {
+        "planning": {
+          "status": "fail",
+          "duration": 0.20036816596984863,
+          "error": "Target context invalid",
+          "tools_used": 0
+        },
+        "recon": {
+          "status": "pass",
+          "duration": 0.5005593299865723,
+          "error": null,
+          "tools_used": 12
+        },
+        "scanning": {
+          "status": "pass",
+          "duration": 0.8001964092254639,
+          "error": null,
+          "tools_used": 7
+        },
+        "exploitation": {
+          "status": "pass",
+          "duration": 1.0002453327178955,
+          "error": null,
+          "tools_used": 8
+        }
+      },
+      "overall_status": "fail",
+      "total_duration": 2.5163474082946777
+    },
+    {
+      "scenario": "Enterprise IIS - Advanced WAF Rules",
+      "target": "https://enterprise-iis.local",
+      "difficulty": "hard",
+      "phases": {
+        "planning": {
+          "status": "pass",
+          "duration": 0.36011695861816406,
+          "error": null,
+          "tools_used": 9
+        },
+        "recon": {
+          "status": "fail",
+          "duration": 0.9005222320556641,
+          "error": "Port scan timeout or no services found",
+          "tools_used": 0
+        },
+        "scanning": {
+          "status": "fail",
+          "duration": 1.4405133724212646,
+          "error": "WAF blocking all probes",
+          "tools_used": 0
+        },
+        "exploitation": {
+          "status": "pass",
+          "duration": 1.8002939224243164,
+          "error": null,
+          "tools_used": 10
+        }
+      },
+      "overall_status": "fail",
+      "total_duration": 4.521494150161743
+    }
+  ],
+  "phase_success_rates": {
+    "planning": {
+      "passed": 9,
+      "failed": 1,
+      "total": 10,
+      "success_rate_pct": 90.0
+    },
+    "recon": {
+      "passed": 9,
+      "failed": 1,
+      "total": 10,
+      "success_rate_pct": 90.0
+    },
+    "scanning": {
+      "passed": 6,
+      "failed": 4,
+      "total": 10,
+      "success_rate_pct": 60.0
+    },
+    "exploitation": {
+      "passed": 7,
+      "failed": 3,
+      "total": 10,
+      "success_rate_pct": 70.0
+    },
+    "persistence": {
+      "passed": 3,
+      "failed": 0,
+      "total": 3,
+      "success_rate_pct": 100.0
+    }
+  },
+  "scenario_success_rates": {},
+  "overall_metrics": {
+    "total_scenarios": 10,
+    "total_passed": 4,
+    "total_failed": 6,
+    "success_rate_pct": 40.0
+  },
+  "test_end": "2026-05-19T14:41:41.811806"
+}

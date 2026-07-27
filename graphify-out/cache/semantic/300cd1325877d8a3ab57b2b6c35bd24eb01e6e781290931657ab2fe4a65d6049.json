@@ -1,0 +1,1 @@
+{"nodes": [{"id": "concept_ghostwire_v7", "label": "GHOSTWIRE V7 Engine", "file_type": "concept", "source_file": "clean_log.txt"}], "edges": [{"source": "concept_ghostwire_v7", "target": "base_agent_py", "relation": "references", "confidence": "INFERRED", "confidence_score": 0.8, "source_file": "clean_log.txt"}], "hyperedges": []}

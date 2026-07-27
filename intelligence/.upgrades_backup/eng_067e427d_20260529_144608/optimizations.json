@@ -1,0 +1,113 @@
+{
+  "timestamp": "2026-05-29T14:46:08.433767",
+  "engagement_id": "eng_067e427d",
+  "changes": {
+    "tool_effectiveness": {
+      "tool_rates_adjusted": {
+        "nikto": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 2,
+          "avg_duration": 83.15611016750336,
+          "recommendation": "highly_effective"
+        },
+        "httpx": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 3,
+          "avg_duration": 4.032002131144206,
+          "recommendation": "highly_effective"
+        },
+        "nmap": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 2,
+          "avg_duration": 47.305838227272034,
+          "recommendation": "highly_effective"
+        },
+        "curl": {
+          "success_rate": 0.6666666666666666,
+          "priority": 0.6666666666666666,
+          "total_runs": 3,
+          "avg_duration": 1.4585214455922444,
+          "recommendation": "moderate"
+        },
+        "dig": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 4,
+          "avg_duration": 0.2346213459968567,
+          "recommendation": "highly_effective"
+        },
+        "whatweb": {
+          "success_rate": 0.0,
+          "priority": 0.0,
+          "total_runs": 2,
+          "avg_duration": 30.26628029346466,
+          "recommendation": "never_works"
+        }
+      },
+      "tool_order_changed": false,
+      "reasoning": [
+        "Tool 'nikto' highly effective (100% success) - prioritize",
+        "Tool 'httpx' highly effective (100% success) - prioritize",
+        "Tool 'nmap' highly effective (100% success) - prioritize",
+        "Tool 'dig' highly effective (100% success) - prioritize"
+      ]
+    },
+    "finding_confidence": {
+      "confidence_adjustments": {},
+      "high_confidence_techs": [],
+      "reasoning": []
+    },
+    "timeouts": {
+      "timeout_adjustments": {},
+      "reasoning": []
+    },
+    "waf_handling": {
+      "waf_rules": {
+        "cloudflare": {
+          "tools_to_avoid": [],
+          "tools_to_use": [
+            "curl",
+            "dig",
+            "subfinder",
+            "httpx",
+            "nmap",
+            "nikto"
+          ],
+          "recommended_order": [
+            "dig",
+            "httpx",
+            "curl",
+            "nmap",
+            "nikto",
+            "subfinder"
+          ]
+        }
+      },
+      "blocked_tools": {},
+      "effective_tools": {},
+      "reasoning": [
+        "Against cloudflare, use: curl, dig, subfinder"
+      ]
+    }
+  },
+  "recommendations": [
+    {
+      "type": "waf_bypass_strategy",
+      "waf": "cloudflare",
+      "tools_to_use": [
+        "nikto",
+        "httpx",
+        "nmap",
+        "subfinder",
+        "dig"
+      ],
+      "tools_to_avoid": [],
+      "priority": "high",
+      "reasoning": "Against cloudflare, prioritize nikto, httpx, nmap, subfinder, dig"
+    }
+  ],
+  "rollback_data": {}
+}

@@ -4,6 +4,7 @@ from utils.logger import get_logger
 
 log = get_logger("output_parser")
 
+
 class OutputParser:
     def parse(self, tool: str, stdout: str, stderr: str) -> dict:
         """
@@ -35,36 +36,37 @@ class OutputParser:
     def _nmap(self, stdout, stderr) -> dict:
         open_ports = []
         services = {}
-        os_guess = ""
-        for line in stdout.splitlines():
-            m = re.match(r'^(\d+)/(tcp|udp)\s+(open|filtered|closed)\s+(\S+)(?:\s+(.*))?', line)
-            if m:
-                port_info = {
-                    "port": int(m.group(1)),
-                    "protocol": m.group(2),
-                    "state": m.group(3),
-                    "service": m.group(4),
-                    "version": m.group(5).strip() if m.group(5) else ""
-                }
-                if m.group(3) == "open":
-                    open_ports.append(port_info["port"])
-                    services[str(m.group(1))] = port_info
 
-            if "OS details:" in line or "Running:" in line:
-                os_guess = line.strip()
+        # Use finditer to tolerate fused lines
+        for m in re.finditer(
+                r'(\d+)/(tcp|udp)\s+(open|filtered|closed)\s+([\w.-]+)(?:\s+([^/\n]+))?', stdout):
+            port_info = {
+                "port": int(m.group(1)),
+                "protocol": m.group(2),
+                "state": m.group(3),
+                "service": m.group(4),
+                "version": m.group(5).strip() if m.group(5) else ""
+            }
+            if m.group(3) == "open":
+                open_ports.append(port_info["port"])
+                services[str(m.group(1))] = port_info
+
+        os_match = re.search(r'(?:OS details|Running):\s*([^\n\r]+)', stdout)
+        os_guess = os_match.group(1).strip() if os_match else ""
 
         return {
-            "open_ports": open_ports,
+            "open_ports": list(set(open_ports)),
             "services": services,
             "os_guess": os_guess,
-            "total_open": len(open_ports)
+            "total_open": len(set(open_ports))
         }
 
     def _masscan(self, stdout, stderr) -> dict:
         """Returns open_ports as list of ints for consistency with nmap."""
         ports = []
         port_details = []
-        # Use finditer to handle fused lines (masscan results can arrive without newlines)
+        # Use finditer to handle fused lines (masscan results can arrive
+        # without newlines)
         pattern = r'Discovered open port (\d+)/(\w+) on ([\d.]+)'
         for match in re.finditer(pattern, stdout):
             port_num = int(match.group(1))
@@ -86,7 +88,8 @@ class OutputParser:
             "ssl info:", "+ server:"
         ]
         for line in stdout.splitlines():
-            # Support + prefix (standard), - prefix, and * prefix (some versions)
+            # Support + prefix (standard), - prefix, and * prefix (some
+            # versions)
             stripped = None
             if line.startswith("+ "):
                 stripped = line[2:].strip()
@@ -96,7 +99,8 @@ class OutputParser:
                 stripped = line[2:].strip()
 
             if stripped and ":" in stripped:
-                if not any(stripped.lower().startswith(s) for s in skip_prefixes):
+                if not any(stripped.lower().startswith(s)
+                           for s in skip_prefixes):
                     findings.append(stripped)
 
         return {"findings": findings, "count": len(findings)}
@@ -104,7 +108,8 @@ class OutputParser:
     def _whois(self, stdout, stderr) -> dict:
         result = {}
         for line in stdout.splitlines():
-            if ":" in line and not line.startswith("%") and not line.startswith("#"):
+            if ":" in line and not line.startswith(
+                    "%") and not line.startswith("#"):
                 parts = line.split(":", 1)
                 key = parts[0].strip().lower().replace(" ", "_")
                 val = parts[1].strip()
@@ -138,45 +143,34 @@ class OutputParser:
 
     def _gobuster(self, stdout, stderr) -> dict:
         paths = []
-        for line in stdout.splitlines():
-            # Directory mode: /path (Status: 200)
-            m = re.search(r'(/\S*)\s+\(Status:\s*(\d+)\)', line)
-            if m:
-                paths.append({"path": m.group(1), "status": int(m.group(2))})
-                continue
-            # DNS mode: Found: sub.domain.com
-            m2 = re.match(r'^Found:\s*(\S+)', line)
-            if m2:
-                paths.append({"subdomain": m2.group(1), "status": 0})
+        for m in re.finditer(r'(/\S*)\s+\(Status:\s*(\d+)\)', stdout):
+            paths.append({"path": m.group(1), "status": int(m.group(2))})
+
+        for m in re.finditer(r'Found:\s*(\S+)', stdout):
+            paths.append({"subdomain": m.group(1), "status": 0})
+
         return {"discovered_paths": paths, "count": len(paths)}
 
     def _dirb(self, stdout, stderr) -> dict:
         paths = []
-        for line in stdout.splitlines():
-            m = re.match(r'^\+\s+(https?://\S+)', line)
-            if m:
-                paths.append(m.group(1))
-        return {"discovered_paths": paths, "count": len(paths)}
+        for m in re.finditer(r'\+\s+(https?://\S+)', stdout):
+            paths.append(m.group(1))
+        return {"discovered_paths": list(set(paths)), "count": len(set(paths))}
 
     def _ffuf(self, stdout, stderr) -> dict:
         paths = []
-        for line in stdout.splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            # Verbose mode: /path  [Status: 200, ...]
-            m = re.match(r'^(\S*)\s+\[Status:\s*(\d+)', line)
-            if m:
-                path = m.group(1) if m.group(1) else "/"
-                if path.startswith('http'):
-                    try:
-                        from urllib.parse import urlparse
-                        path = urlparse(path).path
-                    except Exception:
-                        pass
-                paths.append({"path": path, "status": int(m.group(2))})
-            elif line.startswith('/') and ' ' not in line:
-                paths.append({"path": line, "status": 0})
+        for m in re.finditer(r'(\S*)\s+\[Status:\s*(\d+)', stdout):
+            path = m.group(1) if m.group(1) else "/"
+            if path.startswith('http'):
+                try:
+                    from urllib.parse import urlparse
+                    path = urlparse(path).path
+                except Exception as _e:
+                    import logging
+                    logging.getLogger(__name__).debug(
+                        f'Swallowed exception in output_parser.py: {_e}')
+            paths.append({"path": path, "status": int(m.group(2))})
+
         return {"discovered_paths": paths, "count": len(paths)}
 
     def _enum4linux(self, stdout, stderr) -> dict:
@@ -193,7 +187,8 @@ class OutputParser:
     def _hydra(self, stdout, stderr) -> dict:
         creds = []
         for line in stdout.splitlines():
-            m = re.search(r'\[(\d+)\]\[(\w+)\] host: (\S+)\s+login: (\S+)\s+password: (\S+)', line)
+            m = re.search(
+                r'\[(\d+)\]\[(\w+)\] host: (\S+)\s+login: (\S+)\s+password: (\S+)', line)
             if m:
                 creds.append({
                     "port": m.group(1), "service": m.group(2),
@@ -233,8 +228,10 @@ class OutputParser:
                     data = json.loads(line)
                     _append_finding(data)
                     continue
-                except Exception:
-                    pass
+                except Exception as _e:
+                    import logging
+                    logging.getLogger(__name__).debug(
+                        f'Swallowed exception in output_parser.py: {_e}')
 
             # Recovery path: walk line and decode all JSON objects found
             idx = 0
@@ -249,14 +246,19 @@ class OutputParser:
                         _append_finding(data)
                         decoded_any = True
                     idx = start + end
-                except Exception:
+                except Exception as e:
+                    import logging as __logging_tmp
+                    __logging_tmp.getLogger(__name__).error(
+                        f"Unhandled exception: {e}", exc_info=True)
                     idx = start + 1
 
             if not decoded_any:
                 # Ignore known nuclei status/noise lines without spamming logs.
-                noise_markers = ["[", "duration", "hosts", "templates", "progress", "matched\":\"0"]
+                noise_markers = [
+                    "[", "duration", "hosts", "templates", "progress", "matched\":\"0"]
                 if not any(x in line.lower() for x in noise_markers):
-                    log.debug(f"Nuclei parser skipped non-JSON line: {line[:120]}")
+                    log.debug(
+                        f"Nuclei parser skipped non-JSON line: {line[:120]}")
         return {"findings": findings, "count": len(findings)}
 
     def _wafw00f(self, stdout, stderr) -> dict:
@@ -266,14 +268,36 @@ class OutputParser:
             if "is behind" in line.lower():
                 is_behind_waf = True
                 # Extract WAF name
-                m = re.search(r'is behind (.+?)(?:\s*\(|$)', line, re.IGNORECASE)
+                m = re.search(
+                    r'is behind (.+?)(?:\s*\(|$)', line, re.IGNORECASE)
                 if m:
                     waf_name = m.group(1).strip()
         return {"is_behind_waf": is_behind_waf, "waf_name": waf_name}
 
     def _generic(self, stdout, stderr) -> dict:
+        # Extract URLs and parameter names so crawler / param-discovery tools
+        # (katana, gau, hakrawler, waybackurls, arjun, paramspider, …) — which
+        # have no dedicated parser — still contribute endpoints and parameters
+        # to the attack surface instead of being discarded as raw text.
+        text = stdout or ""
+        urls = []
+        seen = set()
+        for m in re.finditer(r'https?://[^\s\'"<>\]\),]+', text):
+            u = m.group(0).rstrip('.,);')
+            if u not in seen:
+                seen.add(u)
+                urls.append(u)
+            if len(urls) >= 300:
+                break
+        params = sorted({
+            q.group(1) for q in re.finditer(r'[?&]([a-zA-Z0-9_\-\[\]]{1,40})=', text)
+        })
+        discovered_paths = [{"path": u, "status": 0} for u in urls[:200]]
         return {
-            "raw_lines": stdout.splitlines()[:200],
-            "line_count": len(stdout.splitlines()),
+            "raw_lines": text.splitlines()[:200],
+            "line_count": len(text.splitlines()),
+            "discovered_paths": discovered_paths,
+            "discovered_urls": urls[:200],
+            "parameters": params[:80],
             "has_errors": bool(stderr and len(stderr.strip()) > 0)
         }

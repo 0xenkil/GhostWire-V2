@@ -1,0 +1,191 @@
+{
+  "timestamp": "2026-06-06T16:59:20.886998",
+  "engagement_id": "eng_e6729489",
+  "changes": {
+    "tool_effectiveness": {
+      "tool_rates_adjusted": {
+        "ffuf": {
+          "success_rate": 0.75,
+          "priority": 0.6000000000000001,
+          "total_runs": 4,
+          "avg_duration": 135.69077241420746,
+          "recommendation": "effective"
+        },
+        "subfinder": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 3,
+          "avg_duration": 31.14682348569234,
+          "recommendation": "highly_effective"
+        },
+        "dig": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 5,
+          "avg_duration": 0.18363513946533203,
+          "recommendation": "highly_effective"
+        },
+        "wafw00f": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 2,
+          "avg_duration": 0.6769809722900391,
+          "recommendation": "highly_effective"
+        },
+        "masscan": {
+          "success_rate": 0.16666666666666666,
+          "priority": 0.16666666666666666,
+          "total_runs": 6,
+          "avg_duration": 3.819394588470459,
+          "recommendation": "unreliable"
+        },
+        "amass": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 3,
+          "avg_duration": 71.4223747253418,
+          "recommendation": "highly_effective"
+        },
+        "httpx": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 2,
+          "avg_duration": 1.130325436592102,
+          "recommendation": "highly_effective"
+        },
+        "nuclei": {
+          "success_rate": 0.25,
+          "priority": 0.2,
+          "total_runs": 4,
+          "avg_duration": 225.2050158381462,
+          "recommendation": "unreliable"
+        },
+        "gobuster": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 3,
+          "avg_duration": 11.45266580581665,
+          "recommendation": "highly_effective"
+        },
+        "nmap": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 4,
+          "avg_duration": 2.3334795236587524,
+          "recommendation": "highly_effective"
+        },
+        "whatweb": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 3,
+          "avg_duration": 4.364719231923421,
+          "recommendation": "highly_effective"
+        },
+        "nikto": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 3,
+          "avg_duration": 8.60299277305603,
+          "recommendation": "highly_effective"
+        },
+        "curl": {
+          "success_rate": 0.8,
+          "priority": 0.8,
+          "total_runs": 10,
+          "avg_duration": 1.306002140045166,
+          "recommendation": "effective"
+        }
+      },
+      "tool_order_changed": false,
+      "reasoning": [
+        "Tool 'subfinder' highly effective (100% success) - prioritize",
+        "Tool 'dig' highly effective (100% success) - prioritize",
+        "Tool 'wafw00f' highly effective (100% success) - prioritize",
+        "Tool 'amass' highly effective (100% success) - prioritize",
+        "Tool 'httpx' highly effective (100% success) - prioritize",
+        "Tool 'gobuster' highly effective (100% success) - prioritize",
+        "Tool 'nmap' highly effective (100% success) - prioritize",
+        "Tool 'whatweb' highly effective (100% success) - prioritize",
+        "Tool 'nikto' highly effective (100% success) - prioritize",
+        "Tool 'curl' highly effective (80% success) - prioritize"
+      ]
+    },
+    "finding_confidence": {
+      "confidence_adjustments": {},
+      "high_confidence_techs": [],
+      "reasoning": []
+    },
+    "timeouts": {
+      "timeout_adjustments": {},
+      "reasoning": []
+    },
+    "waf_handling": {
+      "waf_rules": {
+        "cloudflare": {
+          "tools_to_avoid": [],
+          "tools_to_use": [
+            "curl",
+            "dig",
+            "subfinder",
+            "whatweb",
+            "nmap",
+            "nikto",
+            "gobuster",
+            "ffuf",
+            "httpx",
+            "masscan",
+            "amass",
+            "wafw00f",
+            "sslscan",
+            "nuclei"
+          ],
+          "recommended_order": [
+            "curl",
+            "dig",
+            "nmap",
+            "subfinder",
+            "whatweb",
+            "nikto",
+            "gobuster",
+            "ffuf",
+            "amass",
+            "httpx",
+            "wafw00f",
+            "masscan",
+            "sslscan",
+            "nuclei"
+          ]
+        }
+      },
+      "blocked_tools": {},
+      "effective_tools": {},
+      "reasoning": [
+        "Against cloudflare, use: curl, dig, subfinder"
+      ]
+    }
+  },
+  "recommendations": [
+    {
+      "type": "waf_bypass_strategy",
+      "waf": "cloudflare",
+      "tools_to_use": [
+        "ffuf",
+        "subfinder",
+        "dig",
+        "wafw00f",
+        "sslscan",
+        "amass",
+        "httpx",
+        "gobuster",
+        "nmap",
+        "whatweb",
+        "nikto",
+        "curl"
+      ],
+      "tools_to_avoid": [],
+      "priority": "high",
+      "reasoning": "Against cloudflare, prioritize ffuf, subfinder, dig, wafw00f, sslscan, amass, httpx, gobuster, nmap, whatweb, nikto, curl"
+    }
+  ],
+  "rollback_data": {}
+}

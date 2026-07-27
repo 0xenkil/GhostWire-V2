@@ -1,0 +1,30 @@
+resilience:
+  post_heavy_scan_cooldown: 90
+  tls_breaker_backoff_secs: 60
+  nuclei_rate_limit_default: 40
+  nuclei_rate_limit_waf: 15
+  network_unfixable_exits: [3, 6, 7, 28, 35, 52, 56]
+  rate_limit_initial_backoff: 10
+  tool_retry_count: 2
+  tool_retry_delay: 1
+
+vps_health:
+  disk_warn_pct: 90
+  disk_abort_pct: 95
+  mem_low_mb: 200
+  zombie_age_minutes: 120
+
+network:
+  dns_fallback_servers: ["1.1.1.1", "8.8.8.8", "9.9.9.9"]
+  use_proxy: false
+  use_remote_vps: false
+  use_wsl: true
+
+recon:
+  spa_recon_level: "high"
+
+agent_defaults:
+  ai_backend: "groq"
+  log_level: "INFO"
+  require_written_consent: true
+

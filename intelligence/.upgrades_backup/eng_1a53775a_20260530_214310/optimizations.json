@@ -1,0 +1,209 @@
+{
+  "timestamp": "2026-05-30T21:43:10.772168",
+  "engagement_id": "eng_1a53775a",
+  "changes": {
+    "tool_effectiveness": {
+      "tool_rates_adjusted": {
+        "sslscan": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 7,
+          "avg_duration": 34.541468790599275,
+          "recommendation": "highly_effective"
+        },
+        "gobuster": {
+          "success_rate": 0.0,
+          "priority": 0.0,
+          "total_runs": 14,
+          "avg_duration": 0.19380995205470494,
+          "recommendation": "never_works"
+        },
+        "ffuf": {
+          "success_rate": 0.0,
+          "priority": 0.0,
+          "total_runs": 22,
+          "avg_duration": 39.28521200743589,
+          "recommendation": "never_works"
+        },
+        "nuclei": {
+          "success_rate": 0.0,
+          "priority": 0.0,
+          "total_runs": 6,
+          "avg_duration": 2.5649067163467407,
+          "recommendation": "never_works"
+        },
+        "subfinder": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 5,
+          "avg_duration": 25.014656019210815,
+          "recommendation": "highly_effective"
+        },
+        "sqlmap": {
+          "success_rate": 0.1111111111111111,
+          "priority": 0.1111111111111111,
+          "total_runs": 9,
+          "avg_duration": 2.8820548587375217,
+          "recommendation": "unreliable"
+        },
+        "hydra": {
+          "success_rate": 0.0,
+          "priority": 0.0,
+          "total_runs": 5,
+          "avg_duration": 0.20762553215026855,
+          "recommendation": "never_works"
+        },
+        "nikto": {
+          "success_rate": 0.6923076923076923,
+          "priority": 0.5538461538461539,
+          "total_runs": 13,
+          "avg_duration": 160.68838356091425,
+          "recommendation": "moderate"
+        },
+        "curl": {
+          "success_rate": 0.7692307692307693,
+          "priority": 0.7692307692307693,
+          "total_runs": 13,
+          "avg_duration": 1.9437902523921087,
+          "recommendation": "effective"
+        },
+        "whatweb": {
+          "success_rate": 0.8571428571428571,
+          "priority": 0.8571428571428571,
+          "total_runs": 7,
+          "avg_duration": 8.612405981336321,
+          "recommendation": "effective"
+        },
+        "nmap": {
+          "success_rate": 0.6,
+          "priority": 0.48,
+          "total_runs": 10,
+          "avg_duration": 416.90538504123685,
+          "recommendation": "moderate"
+        },
+        "dig": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 12,
+          "avg_duration": 2.054765462875366,
+          "recommendation": "highly_effective"
+        },
+        "masscan": {
+          "success_rate": 0.0,
+          "priority": 0.0,
+          "total_runs": 2,
+          "avg_duration": 15.154923677444458,
+          "recommendation": "never_works"
+        },
+        "httpx": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 3,
+          "avg_duration": 3.8318517208099365,
+          "recommendation": "highly_effective"
+        }
+      },
+      "tool_order_changed": false,
+      "reasoning": [
+        "Tool 'sslscan' highly effective (100% success) - prioritize",
+        "Tool 'gobuster' has 0% success rate after 14 runs - consider removing",
+        "Tool 'ffuf' has 0% success rate after 22 runs - consider removing",
+        "Tool 'nuclei' has 0% success rate after 6 runs - consider removing",
+        "Tool 'subfinder' highly effective (100% success) - prioritize",
+        "Tool 'hydra' has 0% success rate after 5 runs - consider removing",
+        "Tool 'whatweb' highly effective (86% success) - prioritize",
+        "Tool 'dig' highly effective (100% success) - prioritize",
+        "Tool 'httpx' highly effective (100% success) - prioritize"
+      ]
+    },
+    "finding_confidence": {
+      "confidence_adjustments": {},
+      "high_confidence_techs": [
+        {
+          "technology": "nodejs",
+          "confidence": 0.95,
+          "reasoning": "Found 4 times in engagement"
+        },
+        {
+          "technology": "php",
+          "confidence": 0.95,
+          "reasoning": "Found 12 times in engagement"
+        }
+      ],
+      "reasoning": [
+        "Technology 'nodejs' appears reliably (4 times)",
+        "Technology 'php' appears reliably (12 times)"
+      ]
+    },
+    "timeouts": {
+      "timeout_adjustments": {},
+      "reasoning": []
+    },
+    "waf_handling": {
+      "waf_rules": {
+        "generic_waf": {
+          "tools_to_avoid": [],
+          "tools_to_use": [
+            "curl",
+            "dig",
+            "subfinder",
+            "httpx",
+            "nmap",
+            "whatweb",
+            "sslscan",
+            "nikto",
+            "sqlmap",
+            "ssh_cmd"
+          ],
+          "recommended_order": [
+            "dig",
+            "curl",
+            "nikto",
+            "sslscan",
+            "nmap",
+            "whatweb",
+            "subfinder",
+            "httpx",
+            "sqlmap",
+            "ssh_cmd"
+          ]
+        }
+      },
+      "blocked_tools": {},
+      "effective_tools": {},
+      "reasoning": [
+        "Against generic_waf, use: curl, dig, subfinder"
+      ]
+    }
+  },
+  "recommendations": [
+    {
+      "type": "waf_bypass_strategy",
+      "waf": "generic_waf",
+      "tools_to_use": [
+        "sslscan",
+        "subfinder",
+        "ssh_cmd",
+        "curl",
+        "whatweb",
+        "dig",
+        "httpx"
+      ],
+      "tools_to_avoid": [],
+      "priority": "high",
+      "reasoning": "Against generic_waf, prioritize sslscan, subfinder, ssh_cmd, curl, whatweb, dig, httpx"
+    },
+    {
+      "type": "skip_ineffective_tools",
+      "tools": [
+        "gobuster",
+        "ffuf",
+        "nuclei",
+        "hydra"
+      ],
+      "priority": "medium",
+      "reasoning": "Tools ['gobuster', 'ffuf', 'nuclei', 'hydra'] never succeeded - consider skipping on similar targets"
+    }
+  ],
+  "rollback_data": {}
+}

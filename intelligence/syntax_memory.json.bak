@@ -1,0 +1,158 @@
+{
+  "bash": [
+    {
+      "syntax": "ffuf -u https://novalink.lk/FUZZ -w /usr/share/dirb/wordlists/common.txt -rate 50 -H \"User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36\" -o /home/en/redteam-workspace/results/dir_fuzz.txt",
+      "error_context_resolved": "/'___\\  /'___\\           /'___\\       \n       /\\ \\__/ /\\ \\__/  __  __  /\\ \\__/       \n       \\ \\ ,__\\\\ \\ ,__\\/\\ \\/\\ \\ \\ \\ ,__\\      \n        \\ \\ \\_/ \\ \\ \\_/\\ \\ \\_\\ \\ \\ \\ \\_/      \n         \\ \\_\\   \\ \\"
+    },
+    {
+      "syntax": "whatweb -a 3 https://novalink.lk/ --log-xml=/home/en/redteam-workspace/results/whatweb_novalink.xml",
+      "error_context_resolved": "https://novalink.lk/ [200 OK] Country[UNITED STATES][US], HTML5, HTTPServer[Vercel], IP[216.198.79.1], Open-Graph-Protocol[website], Script[module], Strict-Transport-Security[max-age=63072000], Title["
+    },
+    {
+      "syntax": "whatweb -a 1 https://novalink.lk/",
+      "error_context_resolved": "https://novalink.lk/ [200 OK] Country[UNITED STATES][US], HTML5, HTTPServer[Vercel], IP[216.198.79.1], Open-Graph-Protocol[website], Script[module], Strict-Transport-Security[max-age=63072000], Title["
+    },
+    {
+      "syntax": "whatweb https://novalink.lk/ --log-xml=/home/en/redteam-workspace/results/whatweb_novalink.xml",
+      "error_context_resolved": "https://novalink.lk/ [200 OK] Country[UNITED STATES][US], HTML5, HTTPServer[Vercel], IP[216.198.79.1], Open-Graph-Protocol[website], Script[module], Strict-Transport-Security[max-age=63072000], Title["
+    },
+    {
+      "syntax": "curl -I -s -o /dev/null -w \"%{http_code}\" https://novalink.lk/",
+      "error_context_resolved": "200"
+    },
+    {
+      "syntax": "curl -I -X OPTIONS https://novalink.lk/",
+      "error_context_resolved": "% Total    % Received % Xferd  Average Speed  Time    Time    Time   Current\n                                 Dload  Upload  Total   Spent   Left   Speed\n\n  0      0   0      0   0      0      0      "
+    },
+    {
+      "syntax": "curl -I -A \"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36\" https://novalink.lk/",
+      "error_context_resolved": "% Total    % Received % Xferd  Average Speed  Time    Time    Time   Current\n                                 Dload  Upload  Total   Spent   Left   Speed\n\n  0      0   0      0   0      0      0      "
+    },
+    {
+      "syntax": "whatweb -a 3 https://novalink.lk/",
+      "error_context_resolved": "https://novalink.lk/ [200 OK] Country[UNITED STATES][US], HTML5, HTTPServer[Vercel], IP[216.198.79.1], Open-Graph-Protocol[website], Script[module], Strict-Transport-Security[max-age=63072000], Title["
+    },
+    {
+      "syntax": "whatweb --user-agent=\"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36\" https://novalink.lk/",
+      "error_context_resolved": "https://novalink.lk/ [200 OK] Country[UNITED STATES][US], HTML5, HTTPServer[Vercel], IP[216.198.79.1], Open-Graph-Protocol[website], Script[module], Strict-Transport-Security[max-age=63072000], Title["
+    }
+  ],
+  "curl": [
+    {
+      "syntax": "curl -H \"User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0\" -H \"X-Forwarded-For: 78.202.134.7\" -H \"X-Real-IP: 78.202.134.7\" -H \"Accept-Language: en-US\" -H \"Referer: https://www.google.com/\" -sI --max-time 10 http://novalink.lk",
+      "error_context_resolved": "Success on first try"
+    },
+    {
+      "syntax": "curl -H \"User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36\" -H \"X-Forwarded-For: 97.35.142.155\" -H \"X-Real-IP: 97.35.142.155\" -H \"Accept-Language: en-US\" -H \"Referer: https://www.google.com/\" -H \"X-Host: https://novalink.lk\" -H \"X-Client-IP: 97.35.142.155\" -H \"X-Forwarded-Host: https://novalink.lk\" -k -sI --max-time 10 https://novalink.lk",
+      "error_context_resolved": "Success on first try"
+    },
+    {
+      "syntax": "curl -H \"User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36\" -H \"X-Forwarded-For: 236.39.52.202\" -H \"X-Real-IP: 236.39.52.202\" -H \"Accept-Language: en-US\" -H \"Referer: https://www.google.com/\" -H \"X-Forwarded-Host: https://novalink.lk\" -H \"X-Bluecoat-Via: 236.39.52.202\" -H \"User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36\" -H \"Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8\" -H \"Accept-Language: en-US,en;q=0.5\" -H \"Accept-Encoding: gzip, deflate, br\" -H \"Connection: keep-alive\" -H \"Upgrade-Insecure-Requests: 1\" -sL --max-time 15 https://novalink.lk",
+      "error_context_resolved": "Success on first try"
+    },
+    {
+      "syntax": "curl -H \"User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36\" -H \"X-Forwarded-For: 165.32.75.36\" -H \"X-Real-IP: 165.32.75.36\" -H \"Accept-Language: en-US\" -H \"Referer: https://www.google.com/\" -H \"Forwarded: for=127.0.0.1;proto=http;by=127.0.0.1\" -H \"X-Originating-IP: 165.32.75.36\" -H \"User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36\" -H \"Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8\" -H \"Accept-Language: en-US,en;q=0.5\" -H \"Accept-Encoding: gzip, deflate, br\" -H \"Connection: keep-alive\" -H \"Upgrade-Insecure-Requests: 1\" -so /dev/null -w '%{size_download}' --max-time 10 https://novalink.lk/antigravity-spa-probe-1780826570",
+      "error_context_resolved": "Success on first try"
+    },
+    {
+      "syntax": "curl -H \"User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 17_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Mobile/15E148 Safari/604.1\" -H \"X-Forwarded-For: 100.19.111.152\" -H \"X-Real-IP: 100.19.111.152\" -H \"Accept-Language: en-US\" -H \"Referer: https://www.google.com/\" -H \"X-Forwarded-Host: http://novalink.lk\" -sI --max-time 10 http://novalink.lk",
+      "error_context_resolved": "Success on first try"
+    },
+    {
+      "syntax": "curl -H \"User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36\" -H \"X-Forwarded-For: 19.87.168.12\" -H \"X-Real-IP: 19.87.168.12\" -H \"Accept-Language: en-US\" -H \"Referer: https://www.google.com/\" -H \"X-Client-IP: 19.87.168.12\" -k -sI --max-time 10 https://novalink.lk",
+      "error_context_resolved": "Success on first try"
+    },
+    {
+      "syntax": "curl -H \"User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 17_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Mobile/15E148 Safari/604.1\" -H \"X-Forwarded-For: 142.154.151.107\" -H \"X-Real-IP: 142.154.151.107\" -H \"Accept-Language: en-US\" -H \"Referer: https://www.google.com/\" -H \"X-Client-IP: 142.154.151.107\" -H \"User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36\" -H \"Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8\" -H \"Accept-Language: en-US,en;q=0.5\" -H \"Accept-Encoding: gzip, deflate, br\" -H \"Connection: keep-alive\" -H \"Upgrade-Insecure-Requests: 1\" -sL --max-time 15 https://novalink.lk",
+      "error_context_resolved": "Success on first try"
+    },
+    {
+      "syntax": "curl -H \"User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36\" -H \"X-Forwarded-For: 239.126.120.38\" -H \"X-Real-IP: 239.126.120.38\" -H \"Accept-Language: en-US\" -H \"Referer: https://www.google.com/\" -H \"X-Remote-Addr: 239.126.120.38\" -H \"Forwarded: for=127.0.0.1;proto=http;by=127.0.0.1\" -H \"Via: 1.1 google.com\" -H \"User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36\" -H \"Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8\" -H \"Accept-Language: en-US,en;q=0.5\" -H \"Accept-Encoding: gzip, deflate, br\" -H \"Connection: keep-alive\" -H \"Upgrade-Insecure-Requests: 1\" -so /dev/null -w '%{size_download}' --max-time 10 https://novalink.lk/antigravity-spa-probe-1780827866",
+      "error_context_resolved": "Success on first try"
+    },
+    {
+      "syntax": "curl -H \"User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36\" -H \"X-Forwarded-For: 81.51.98.40\" -H \"X-Real-IP: 81.51.98.40\" -H \"Accept-Language: en-US\" -H \"Referer: https://www.google.com/\" -H \"X-Forwarded-Host: http://novalink.lk\" -I -v https://novalink.lk/",
+      "error_context_resolved": "Success on first try"
+    },
+    {
+      "syntax": "curl -sL --max-time 12 http://novalink.lk",
+      "error_context_resolved": "Success on first try"
+    }
+  ],
+  "nmap": [
+    {
+      "syntax": "nmap --script ssh-auth-methods novalink.lk -p 22",
+      "error_context_resolved": "Success on first try"
+    },
+    {
+      "syntax": "nmap -sS novalink.lk --privileged -p 1-1024",
+      "error_context_resolved": "Couldn't open a raw socket. Error: (1) Operation not permitted\ndnet: failed to open device eth0\nCouldn't open a raw socket or eth handle.\nQUITTING!"
+    }
+  ],
+  "whatweb": [
+    {
+      "syntax": "whatweb --header \"User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36\" --header \"X-Forwarded-For: 116.243.175.95\" --header \"X-Real-IP: 116.243.175.95\" --header \"Accept-Language: en-US\" --header \"Referer: https://www.google.com/\" --header \"X-Custom-IP-Authorization: 116.243.175.95\" --header \"Via: 1.1 google.com\" --header \"X-Bluecoat-Via: 116.243.175.95\" https://novalink.lk --no-errors",
+      "error_context_resolved": "Success on first try"
+    },
+    {
+      "syntax": "whatweb --header \"User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36\" --header \"X-Forwarded-For: 173.216.78.108\" --header \"X-Real-IP: 173.216.78.108\" --header \"Accept-Language: en-US\" --header \"Referer: https://www.google.com/\" --header \"X-Originating-IP: 173.216.78.108\" --header \"X-Custom-IP-Authorization: 173.216.78.108\" --header \"X-Remote-IP: 173.216.78.108\" https://novalink.lk --no-errors",
+      "error_context_resolved": "Success on first try"
+    },
+    {
+      "syntax": "whatweb --input-file=/home/en/redteam-workspace/eng_2e0fb245/results/live_subdomains.txt",
+      "error_context_resolved": "Success on first try"
+    }
+  ],
+  "nikto": [
+    {
+      "syntax": "nikto -h https://novalink.lk -evasion 1 -Tuning 123",
+      "error_context_resolved": "Success on first try"
+    }
+  ],
+  "dig": [
+    {
+      "syntax": "dig @1.1.1.1 A novalink.lk +short",
+      "error_context_resolved": "Success on first try"
+    },
+    {
+      "syntax": "dig @1.1.1.1 MX novalink.lk +short",
+      "error_context_resolved": "Success on first try"
+    },
+    {
+      "syntax": "dig @1.1.1.1 NS novalink.lk +short",
+      "error_context_resolved": "Success on first try"
+    },
+    {
+      "syntax": "dig @1.1.1.1 TXT novalink.lk +short",
+      "error_context_resolved": "Success on first try"
+    }
+  ],
+  "subfinder": [
+    {
+      "syntax": "subfinder -d novalink.lk",
+      "error_context_resolved": "Success on first try"
+    }
+  ],
+  "gobuster": [
+    {
+      "syntax": "gobuster dir --url https://novalink.lk --wordlist /usr/share/dirb/wordlists/common.txt",
+      "error_context_resolved": "Success on first try"
+    }
+  ],
+  "wafw00f": [
+    {
+      "syntax": "wafw00f https://novalink.lk",
+      "error_context_resolved": "Success on first try"
+    },
+    {
+      "syntax": "wafw00f https://216.198.79.1",
+      "error_context_resolved": "Success on first try"
+    }
+  ],
+  "nuclei": [
+    {
+      "syntax": "nuclei -target https://novalink.lk -severity critical,high -rl 10 -o /home/en/redteam-workspace/eng_7f6496eb/results/nuclei_scan.txt",
+      "error_context_resolved": "__     _\n   ____  __  _______/ /__  (_)\n  / __ \\/ / / / ___/ / _ \\/ /\n / / / / /_/ / /__/ /  __/ /\n/_/ /_/\\__,_/\\___/_/\\___/_/   v3.8.0\n\n\t\tprojectdiscovery.io\n\n[WRN] Found 1 templates with runtime err"
+    }
+  ]
+}

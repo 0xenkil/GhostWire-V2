@@ -1,0 +1,174 @@
+{
+    "debug_log_file": "debug-1371fd.log",
+    "debug_session_id": "1371fd",
+    "max_safe_run_recursion": 8,
+    "ssh_max_sessions": 50,
+    "ulimit_nofile": 65536,
+    "fs_file_max": 2097152,
+    "tcp_rmem_max": 134217728,
+    "tcp_wmem_max": 134217728,
+    "max_engagements_to_keep": 15,
+    "min_disk_space_gb": 50,
+    "global_dns_resolver": "1.1.1.1",
+    "vps_results_base": "~/redteam-workspace/results",
+    "disallowed_python_patterns": [
+        "os.system",
+        "subprocess.run",
+        "shutil.rmtree",
+        "os.remove",
+        "os.chmod"
+    ],
+    "bash_dangerous_patterns": [
+        "rm\\s+-rf\\s+/",
+        ">\\s+/dev/sda",
+        "mkfs",
+        "dd\\s+if=",
+        "chmod\\s+777\\s+/",
+        "chown\\s+root"
+    ],
+    "allowed_command_wrappers": [
+        "proxychains4",
+        "torify",
+        "sudo",
+        "timeout",
+        "sh",
+        "bash",
+        "python3"
+    ],
+    "tool_flag_sanitization": [
+        {
+            "match": "gobuster",
+            "search": "\\s+--wildcard\\b",
+            "replace": ""
+        },
+        {
+            "match": "gobuster",
+            "search": " -w ",
+            "replace": " -w="
+        },
+        {
+            "match": "gobuster",
+            "search": "gobuster\\s+(?!(dir|dns|vhost|fuzz|s3|gcs|tftp|version|help))",
+            "replace": "gobuster dir "
+        },
+        {
+            "match": "nikto",
+            "search": "--(useragent|host|port|output|Pause|pause|Format|Tuning|ssl|timeout|Display|evasion|id|config|dbcheck|nointeractive|nolookup|update|Version|ask|maxtime|noslash)\\b",
+            "replace": "-\\1"
+        },
+        {
+            "match": "sqlmap",
+            "search": "--random_agent|-random-agent",
+            "replace": ""
+        },
+        {
+            "match": "sqlmap",
+            "search": "--(level|risk)\\s+",
+            "replace": "--\\1="
+        },
+        {
+            "match": "nikto",
+            "search": "\\s+-host\\s+",
+            "replace": " -h "
+        },
+        {
+            "match": "nikto",
+            "search": "\\s+-p\\s+",
+            "replace": " -port "
+        },
+        {
+            "match": "sqlmap",
+            "search": "--proxy[\\s=]\\S+",
+            "replace": ""
+        },
+        {
+            "match": "sqlmap",
+            "search": "--batch --random-agent",
+            "replace": "--batch --random-agent --level 3 --risk 2"
+        },
+        {
+            "match": "wfuzz",
+            "search": "--data\\s+",
+            "replace": "-d "
+        }
+    ],
+    "_comment_ip_rotation": "Tor/proxy identity rotation settings",
+    "tor_socks_port": 9050,
+    "tor_control_port": 9051,
+    "ip_rotation_every_n_requests": 5,
+    "ip_rotation_timeout_secs": 20,
+    "ip_rotation_settle_secs": 2,
+    "ip_rotation_verify_change": true,
+    "ip_rotation_max_errors": 3,
+    "_comment_waf_defense": "WAF evasion parameters",
+    "waf_evasion_user_agents": [
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Mobile/15E148 Safari/604.1",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:120.0) Gecko/20100101 Firefox/120.0"
+    ],
+    "waf_evasion_extra_headers": [
+        {
+            "X-Forwarded-For": "127.0.0.1"
+        },
+        {
+            "X-Originating-IP": "127.0.0.1"
+        },
+        {
+            "X-Remote-IP": "127.0.0.1"
+        },
+        {
+            "X-Remote-Addr": "127.0.0.1"
+        },
+        {
+            "X-Client-IP": "127.0.0.1"
+        },
+        {
+            "X-Host": "localhost"
+        },
+        {
+            "Forwarded": "for=127.0.0.1;proto=http;by=127.0.0.1"
+        },
+        {
+            "X-Custom-IP-Authorization": "127.0.0.1"
+        },
+        {
+            "X-Bluecoat-Via": "127.0.0.1"
+        },
+        {
+            "Via": "1.1 google.com"
+        },
+        {
+            "X-Forwarded-Host": "localhost"
+        }
+    ],
+    "waf_jitter_min_ms": 500,
+    "waf_jitter_max_ms": 2000,
+    "waf_min_request_delay_secs": 0,
+    "waf_max_request_delay_secs": 2,
+    "waf_rotate_ip_on_block": true,
+    "waf_block_status_codes": [
+        403,
+        418,
+        429,
+        503
+    ],
+    "ai_system_guidance": "### GHOST PROTOCOL V5 STATUS: ACTIVE\n- SYSTEM UPGRADE: IP rotation is now handled via aggressive Tor NEWNYM signaling (Groq/Gemini key rotation is also active).\n- DO NOT manually add --proxy, --tor, proxychains, or torify flags. The framework injects these at the kernel/execution level.\n- WAF BYPASS: We have implemented dynamic User-Agent rotation and X-Forwarded-For headers. Avoid hardcoding these.\n- AI CONTEXT: If you see 'WAF Blocked' or 'Rate Limited', do not panic. Simply suggest a DIFFERENT tool or a MUTATED payload. The system will handle the IP change.\n- SYNTAX RULES: Use modern tool syntax (e.g., 'gobuster dir', 'nuclei -t', 'ffuf -u').\n- FAILSAFE: If your command is rejected by the 'Sanity Guard', rethink the syntax; don't just repeat it.",
+    "ai_max_system_guidance_chars": 1200,
+    "ai_max_services_context_chars": 300,
+    "ai_max_query_chars": 14000,
+    "v5_upgrades_summary": {
+        "rotation_logic": "Aggressive rotation on 429/403/401 errors.",
+        "evasion_engine": "Dynamic header injection and TLS fingerprint randomization (impersonate-chrome).",
+        "intelligence_layer": "Logic Sanity Guard active to prevent command mangling."
+    },
+    "failure_context_limit": 5,
+    "_comment_ghost_engine": "WAF ghost mutation settings",
+    "waf_ghost_noise_requests": 2,
+    "waf_ghost_shadow_depth": 3,
+    "waf_ghost_use_parasitism": true,
+    "waf_ghost_use_h2_desynch": true,
+    "waf_ghost_noise_delay_min_ms": 100,
+    "waf_ghost_noise_delay_max_ms": 800
+}

@@ -1,0 +1,17 @@
+[
+  {
+    "type": "waf_defense_policy",
+    "waf": "cloudflare",
+    "tools_to_avoid": [],
+    "priority": "high",
+    "reasoning": "cloudflare detected - keep validation low-rate, record block evidence, and stop commands that trigger WAF/rate-limit/CAPTCHA responses"
+  },
+  {
+    "type": "skip_ineffective_tools",
+    "tools": [
+      "ai_dynamic_recon"
+    ],
+    "priority": "medium",
+    "reasoning": "Tools ['ai_dynamic_recon'] never succeeded - consider skipping on similar targets"
+  }
+]

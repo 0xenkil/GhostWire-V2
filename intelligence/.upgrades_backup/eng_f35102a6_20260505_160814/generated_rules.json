@@ -1,0 +1,42 @@
+{
+  "engagement_id": "eng_f35102a6",
+  "timestamp": "2026-05-05T16:08:14.385905",
+  "rules": {
+    "exploitation": [],
+    "infrastructure": [
+      {
+        "id": "waf_cloudflare_handling",
+        "name": "Handle cloudflare WAF",
+        "type": "waf_detection",
+        "condition": {
+          "waf_detected": "cloudflare"
+        },
+        "actions": {
+          "skip_tools": [],
+          "prefer_tools": [
+            "curl",
+            "dig",
+            "subfinder",
+            "gobuster",
+            "masscan",
+            "nmap",
+            "wafw00f",
+            "nikto",
+            "nuclei"
+          ],
+          "set_timeout": 45,
+          "use_evasion": true
+        },
+        "confidence": 0.9,
+        "source": "engagement_eng_f35102a6"
+      }
+    ],
+    "recon": [],
+    "weaponization": []
+  },
+  "generated_from_patterns": [
+    "Perfect tools (100% success): subfinder, dig, nikto, nmap, gobuster, nuclei, wafw00f",
+    "Never-successful tools: whois, theharvester",
+    "Pattern: cloudflare WAF detection"
+  ]
+}

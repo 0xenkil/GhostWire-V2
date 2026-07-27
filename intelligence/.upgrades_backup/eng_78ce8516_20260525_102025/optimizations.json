@@ -1,0 +1,125 @@
+{
+  "timestamp": "2026-05-25T10:20:25.491997",
+  "engagement_id": "eng_78ce8516",
+  "changes": {
+    "tool_effectiveness": {
+      "tool_rates_adjusted": {
+        "nmap": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 5,
+          "avg_duration": 42.06610746383667,
+          "recommendation": "highly_effective"
+        },
+        "gobuster": {
+          "success_rate": 0.5,
+          "priority": 0.5,
+          "total_runs": 4,
+          "avg_duration": 2.653192698955536,
+          "recommendation": "moderate"
+        },
+        "nikto": {
+          "success_rate": 0.6,
+          "priority": 0.6,
+          "total_runs": 5,
+          "avg_duration": 75.6893991470337,
+          "recommendation": "moderate"
+        },
+        "subfinder": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 2,
+          "avg_duration": 3.7407939434051514,
+          "recommendation": "highly_effective"
+        },
+        "dig": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 4,
+          "avg_duration": 0.40643811225891113,
+          "recommendation": "highly_effective"
+        },
+        "ffuf": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 3,
+          "avg_duration": 21.196098407109577,
+          "recommendation": "highly_effective"
+        },
+        "wfuzz": {
+          "success_rate": 0.5,
+          "priority": 0.5,
+          "total_runs": 4,
+          "avg_duration": 1.0260872840881348,
+          "recommendation": "moderate"
+        }
+      },
+      "tool_order_changed": false,
+      "reasoning": [
+        "Tool 'nmap' highly effective (100% success) - prioritize",
+        "Tool 'subfinder' highly effective (100% success) - prioritize",
+        "Tool 'dig' highly effective (100% success) - prioritize",
+        "Tool 'ffuf' highly effective (100% success) - prioritize"
+      ]
+    },
+    "finding_confidence": {
+      "confidence_adjustments": {},
+      "high_confidence_techs": [],
+      "reasoning": []
+    },
+    "timeouts": {
+      "timeout_adjustments": {},
+      "reasoning": []
+    },
+    "waf_handling": {
+      "waf_rules": {
+        "generic_waf": {
+          "tools_to_avoid": [],
+          "tools_to_use": [
+            "dig",
+            "nmap",
+            "whatweb",
+            "subfinder",
+            "sslscan",
+            "nikto",
+            "wfuzz",
+            "gobuster",
+            "masscan",
+            "ffuf",
+            "ssh_cmd"
+          ],
+          "recommended_order": [
+            "nmap",
+            "dig",
+            "nikto",
+            "ffuf",
+            "subfinder",
+            "wfuzz",
+            "gobuster",
+            "whatweb",
+            "sslscan",
+            "masscan",
+            "ssh_cmd"
+          ],
+          "top_evasion_vectors": []
+        }
+      },
+      "blocked_tools": {},
+      "effective_tools": {},
+      "evasion_priorities": {},
+      "reasoning": [
+        "Against generic_waf, use: dig, nmap, whatweb"
+      ]
+    }
+  },
+  "recommendations": [
+    {
+      "type": "waf_defense_policy",
+      "waf": "generic_waf",
+      "tools_to_avoid": [],
+      "priority": "high",
+      "reasoning": "generic_waf detected - keep validation low-rate, record block evidence, and stop commands that trigger WAF/rate-limit/CAPTCHA responses"
+    }
+  ],
+  "rollback_data": {}
+}

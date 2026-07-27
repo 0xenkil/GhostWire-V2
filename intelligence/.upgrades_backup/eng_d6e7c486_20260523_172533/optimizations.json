@@ -1,0 +1,137 @@
+{
+  "timestamp": "2026-05-23T17:25:33.456186",
+  "engagement_id": "eng_d6e7c486",
+  "changes": {
+    "tool_effectiveness": {
+      "tool_rates_adjusted": {
+        "dig": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 4,
+          "avg_duration": 0.3028814196586609,
+          "recommendation": "highly_effective"
+        },
+        "wget": {
+          "success_rate": 0.0,
+          "priority": 0.0,
+          "total_runs": 2,
+          "avg_duration": 31.6021945476532,
+          "recommendation": "never_works"
+        },
+        "nc": {
+          "success_rate": 0.0,
+          "priority": 0.0,
+          "total_runs": 4,
+          "avg_duration": 43.845157504081726,
+          "recommendation": "never_works"
+        },
+        "gobuster": {
+          "success_rate": 0.25,
+          "priority": 0.25,
+          "total_runs": 4,
+          "avg_duration": 16.841155469417572,
+          "recommendation": "unreliable"
+        },
+        "nikto": {
+          "success_rate": 0.6666666666666666,
+          "priority": 0.6666666666666666,
+          "total_runs": 3,
+          "avg_duration": 48.69966967900594,
+          "recommendation": "moderate"
+        },
+        "nmap": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 3,
+          "avg_duration": 35.5966629187266,
+          "recommendation": "highly_effective"
+        },
+        "curl": {
+          "success_rate": 0.0,
+          "priority": 0.0,
+          "total_runs": 2,
+          "avg_duration": 71.24434542655945,
+          "recommendation": "never_works"
+        },
+        "ssh_cmd": {
+          "success_rate": 0.0,
+          "priority": 0.0,
+          "total_runs": 5,
+          "avg_duration": 7.155067825317383,
+          "recommendation": "never_works"
+        }
+      },
+      "tool_order_changed": false,
+      "reasoning": [
+        "Tool 'dig' highly effective (100% success) - prioritize",
+        "Tool 'nc' has 0% success rate after 4 runs - consider removing",
+        "Tool 'nmap' highly effective (100% success) - prioritize",
+        "Tool 'ssh_cmd' has 0% success rate after 5 runs - consider removing"
+      ]
+    },
+    "finding_confidence": {
+      "confidence_adjustments": {},
+      "high_confidence_techs": [],
+      "reasoning": []
+    },
+    "timeouts": {
+      "timeout_adjustments": {},
+      "reasoning": []
+    },
+    "waf_handling": {
+      "waf_rules": {
+        "generic_waf": {
+          "tools_to_avoid": [],
+          "tools_to_use": [
+            "dig",
+            "nmap",
+            "subfinder",
+            "whatweb",
+            "sslscan",
+            "nikto",
+            "ffuf",
+            "bash",
+            "gobuster"
+          ],
+          "recommended_order": [
+            "dig",
+            "nmap",
+            "nikto",
+            "subfinder",
+            "whatweb",
+            "sslscan",
+            "ffuf",
+            "bash",
+            "gobuster"
+          ],
+          "top_evasion_vectors": []
+        }
+      },
+      "blocked_tools": {},
+      "effective_tools": {},
+      "evasion_priorities": {},
+      "reasoning": [
+        "Against generic_waf, use: dig, nmap, subfinder"
+      ]
+    }
+  },
+  "recommendations": [
+    {
+      "type": "waf_defense_policy",
+      "waf": "generic_waf",
+      "tools_to_avoid": [],
+      "priority": "high",
+      "reasoning": "generic_waf detected - keep validation low-rate, record block evidence, and stop commands that trigger WAF/rate-limit/CAPTCHA responses"
+    },
+    {
+      "type": "skip_ineffective_tools",
+      "tools": [
+        "nc",
+        "ssh_cmd"
+      ],
+      "priority": "medium",
+      "reasoning": "Tools ['nc', 'ssh_cmd'] never succeeded - consider skipping on similar targets"
+    }
+  ],
+  "rollback_data": {}
+}

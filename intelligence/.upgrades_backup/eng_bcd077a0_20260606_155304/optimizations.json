@@ -1,0 +1,212 @@
+{
+  "timestamp": "2026-06-06T15:53:04.181424",
+  "engagement_id": "eng_bcd077a0",
+  "changes": {
+    "tool_effectiveness": {
+      "tool_rates_adjusted": {
+        "nmap": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 4,
+          "avg_duration": 4.478887677192688,
+          "recommendation": "highly_effective"
+        },
+        "git": {
+          "success_rate": 0.0,
+          "priority": 0.0,
+          "total_runs": 4,
+          "avg_duration": 0.31931889057159424,
+          "recommendation": "never_works"
+        },
+        "amass": {
+          "success_rate": 0.25,
+          "priority": 0.15,
+          "total_runs": 4,
+          "avg_duration": 614.7492489218712,
+          "recommendation": "unreliable"
+        },
+        "nikto": {
+          "success_rate": 0.45,
+          "priority": 0.45,
+          "total_runs": 20,
+          "avg_duration": 60.23134820461273,
+          "recommendation": "unreliable"
+        },
+        "waybackurls": {
+          "success_rate": 0.0,
+          "priority": 0.0,
+          "total_runs": 4,
+          "avg_duration": 0.3999336361885071,
+          "recommendation": "never_works"
+        },
+        "sslscan": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 2,
+          "avg_duration": 22.26589560508728,
+          "recommendation": "highly_effective"
+        },
+        "wafw00f": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 2,
+          "avg_duration": 3.4465326070785522,
+          "recommendation": "highly_effective"
+        },
+        "httpx": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 2,
+          "avg_duration": 1.2877050638198853,
+          "recommendation": "highly_effective"
+        },
+        "ffuf": {
+          "success_rate": 0.045454545454545456,
+          "priority": 0.02727272727272727,
+          "total_runs": 22,
+          "avg_duration": 304.703792441975,
+          "recommendation": "unreliable"
+        },
+        "dig": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 4,
+          "avg_duration": 0.19445371627807617,
+          "recommendation": "highly_effective"
+        },
+        "whatweb": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 3,
+          "avg_duration": 2.959993282953898,
+          "recommendation": "highly_effective"
+        },
+        "subfinder": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 3,
+          "avg_duration": 3.0978610515594482,
+          "recommendation": "highly_effective"
+        },
+        "curl": {
+          "success_rate": 0.45454545454545453,
+          "priority": 0.45454545454545453,
+          "total_runs": 11,
+          "avg_duration": 10.36938283660195,
+          "recommendation": "unreliable"
+        },
+        "gobuster": {
+          "success_rate": 0.1,
+          "priority": 0.1,
+          "total_runs": 10,
+          "avg_duration": 3.122280740737915,
+          "recommendation": "unreliable"
+        }
+      },
+      "tool_order_changed": false,
+      "reasoning": [
+        "Tool 'nmap' highly effective (100% success) - prioritize",
+        "Tool 'git' has 0% success rate after 4 runs - consider removing",
+        "Tool 'waybackurls' has 0% success rate after 4 runs - consider removing",
+        "Tool 'sslscan' highly effective (100% success) - prioritize",
+        "Tool 'wafw00f' highly effective (100% success) - prioritize",
+        "Tool 'httpx' highly effective (100% success) - prioritize",
+        "Tool 'dig' highly effective (100% success) - prioritize",
+        "Tool 'whatweb' highly effective (100% success) - prioritize",
+        "Tool 'subfinder' highly effective (100% success) - prioritize"
+      ]
+    },
+    "finding_confidence": {
+      "confidence_adjustments": {},
+      "high_confidence_techs": [
+        {
+          "technology": "nodejs",
+          "confidence": 0.95,
+          "reasoning": "Found 5 times in engagement"
+        }
+      ],
+      "reasoning": [
+        "Technology 'nodejs' appears reliably (5 times)"
+      ]
+    },
+    "timeouts": {
+      "timeout_adjustments": {},
+      "reasoning": []
+    },
+    "waf_handling": {
+      "waf_rules": {
+        "generic_waf": {
+          "tools_to_avoid": [
+            "nikto",
+            "gobuster"
+          ],
+          "tools_to_use": [
+            "curl",
+            "dig",
+            "subfinder",
+            "nmap",
+            "nikto",
+            "gobuster",
+            "whatweb",
+            "ffuf",
+            "httpx",
+            "sslscan",
+            "wafw00f",
+            "amass"
+          ],
+          "recommended_order": [
+            "nikto",
+            "curl",
+            "dig",
+            "nmap",
+            "subfinder",
+            "whatweb",
+            "httpx",
+            "sslscan",
+            "wafw00f",
+            "gobuster",
+            "ffuf",
+            "amass"
+          ]
+        }
+      },
+      "blocked_tools": {},
+      "effective_tools": {},
+      "reasoning": [
+        "WAF 'generic_waf' blocks: nikto, gobuster - skip these tools",
+        "Against generic_waf, use: curl, dig, subfinder"
+      ]
+    }
+  },
+  "recommendations": [
+    {
+      "type": "waf_bypass_strategy",
+      "waf": "generic_waf",
+      "tools_to_use": [
+        "nmap",
+        "sslscan",
+        "wafw00f",
+        "httpx",
+        "dig",
+        "whatweb",
+        "subfinder"
+      ],
+      "tools_to_avoid": [
+        "nikto",
+        "gobuster"
+      ],
+      "priority": "high",
+      "reasoning": "Against generic_waf, prioritize nmap, sslscan, wafw00f, httpx, dig, whatweb, subfinder"
+    },
+    {
+      "type": "skip_ineffective_tools",
+      "tools": [
+        "git",
+        "waybackurls"
+      ],
+      "priority": "medium",
+      "reasoning": "Tools ['git', 'waybackurls'] never succeeded - consider skipping on similar targets"
+    }
+  ],
+  "rollback_data": {}
+}

@@ -1,0 +1,29 @@
+[
+  {
+    "type": "waf_bypass_strategy",
+    "waf": "generic_waf",
+    "tools_to_use": [
+      "sslscan",
+      "subfinder",
+      "ssh_cmd",
+      "curl",
+      "whatweb",
+      "dig",
+      "httpx"
+    ],
+    "tools_to_avoid": [],
+    "priority": "high",
+    "reasoning": "Against generic_waf, prioritize sslscan, subfinder, ssh_cmd, curl, whatweb, dig, httpx"
+  },
+  {
+    "type": "skip_ineffective_tools",
+    "tools": [
+      "gobuster",
+      "ffuf",
+      "nuclei",
+      "hydra"
+    ],
+    "priority": "medium",
+    "reasoning": "Tools ['gobuster', 'ffuf', 'nuclei', 'hydra'] never succeeded - consider skipping on similar targets"
+  }
+]

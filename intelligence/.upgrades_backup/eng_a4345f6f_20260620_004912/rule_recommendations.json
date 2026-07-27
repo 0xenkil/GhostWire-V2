@@ -1,0 +1,11 @@
+[
+  {
+    "type": "skip_ineffective_tools",
+    "tools": [
+      "git",
+      "ffuf"
+    ],
+    "priority": "medium",
+    "reasoning": "Tools ['git', 'ffuf'] never succeeded - consider skipping on similar targets"
+  }
+]

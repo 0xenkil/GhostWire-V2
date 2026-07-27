@@ -1,0 +1,137 @@
+{
+  "timestamp": "2026-05-28T14:38:53.664862",
+  "engagement_id": "eng_515cdb59",
+  "changes": {
+    "tool_effectiveness": {
+      "tool_rates_adjusted": {
+        "curl": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 3,
+          "avg_duration": 5.594210386276245,
+          "recommendation": "highly_effective"
+        },
+        "dig": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 4,
+          "avg_duration": 0.30561983585357666,
+          "recommendation": "highly_effective"
+        },
+        "nmap": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 2,
+          "avg_duration": 4.544620752334595,
+          "recommendation": "highly_effective"
+        },
+        "nikto": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 3,
+          "avg_duration": 82.68392999966939,
+          "recommendation": "highly_effective"
+        },
+        "gobuster": {
+          "success_rate": 0.0,
+          "priority": 0.0,
+          "total_runs": 5,
+          "avg_duration": 9.936024475097657,
+          "recommendation": "never_works"
+        },
+        "ffuf": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 3,
+          "avg_duration": 4.596707582473755,
+          "recommendation": "highly_effective"
+        }
+      },
+      "tool_order_changed": false,
+      "reasoning": [
+        "Tool 'curl' highly effective (100% success) - prioritize",
+        "Tool 'dig' highly effective (100% success) - prioritize",
+        "Tool 'nmap' highly effective (100% success) - prioritize",
+        "Tool 'nikto' highly effective (100% success) - prioritize",
+        "Tool 'gobuster' has 0% success rate after 5 runs - consider removing",
+        "Tool 'ffuf' highly effective (100% success) - prioritize"
+      ]
+    },
+    "finding_confidence": {
+      "confidence_adjustments": {},
+      "high_confidence_techs": [
+        {
+          "technology": "nodejs",
+          "confidence": 0.95,
+          "reasoning": "Found 4 times in engagement"
+        }
+      ],
+      "reasoning": [
+        "Technology 'nodejs' appears reliably (4 times)"
+      ]
+    },
+    "timeouts": {
+      "timeout_adjustments": {},
+      "reasoning": []
+    },
+    "waf_handling": {
+      "waf_rules": {
+        "generic_waf": {
+          "tools_to_avoid": [
+            "gobuster"
+          ],
+          "tools_to_use": [
+            "curl",
+            "dig",
+            "subfinder",
+            "nmap",
+            "ffuf",
+            "nikto"
+          ],
+          "recommended_order": [
+            "dig",
+            "curl",
+            "ffuf",
+            "nikto",
+            "nmap",
+            "subfinder"
+          ]
+        }
+      },
+      "blocked_tools": {},
+      "effective_tools": {},
+      "reasoning": [
+        "WAF 'generic_waf' blocks: gobuster - skip these tools",
+        "Against generic_waf, use: curl, dig, subfinder"
+      ]
+    }
+  },
+  "recommendations": [
+    {
+      "type": "waf_bypass_strategy",
+      "waf": "generic_waf",
+      "tools_to_use": [
+        "curl",
+        "dig",
+        "nmap",
+        "nikto",
+        "subfinder",
+        "ffuf"
+      ],
+      "tools_to_avoid": [
+        "gobuster"
+      ],
+      "priority": "high",
+      "reasoning": "Against generic_waf, prioritize curl, dig, nmap, nikto, subfinder, ffuf"
+    },
+    {
+      "type": "skip_ineffective_tools",
+      "tools": [
+        "gobuster"
+      ],
+      "priority": "medium",
+      "reasoning": "Tools ['gobuster'] never succeeded - consider skipping on similar targets"
+    }
+  ],
+  "rollback_data": {}
+}

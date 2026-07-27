@@ -1,0 +1,229 @@
+{
+  "timestamp": "2026-06-12T18:06:02.025710",
+  "engagement_id": "eng_5e1f588a",
+  "changes": {
+    "tool_effectiveness": {
+      "tool_rates_adjusted": {
+        "test": {
+          "success_rate": 0.0,
+          "priority": 0.0,
+          "total_runs": 3,
+          "avg_duration": 0.16269342104593912,
+          "recommendation": "never_works"
+        },
+        "nikto": {
+          "success_rate": 0.8,
+          "priority": 0.48,
+          "total_runs": 5,
+          "avg_duration": 476.8906972885132,
+          "recommendation": "effective"
+        },
+        "gobuster": {
+          "success_rate": 0.08333333333333333,
+          "priority": 0.08333333333333333,
+          "total_runs": 12,
+          "avg_duration": 6.121904750665029,
+          "recommendation": "unreliable"
+        },
+        "bash": {
+          "success_rate": 0.5,
+          "priority": 0.5,
+          "total_runs": 4,
+          "avg_duration": 2.419078767299652,
+          "recommendation": "moderate"
+        },
+        "whatweb": {
+          "success_rate": 0.0,
+          "priority": 0.0,
+          "total_runs": 7,
+          "avg_duration": 0.40716283661978586,
+          "recommendation": "never_works"
+        },
+        "hydra": {
+          "success_rate": 0.8,
+          "priority": 0.8,
+          "total_runs": 5,
+          "avg_duration": 3.6013120651245116,
+          "recommendation": "effective"
+        },
+        "wpscan": {
+          "success_rate": 0.0,
+          "priority": 0.0,
+          "total_runs": 3,
+          "avg_duration": 950.2311317920685,
+          "recommendation": "never_works"
+        },
+        "nmap": {
+          "success_rate": 0.3333333333333333,
+          "priority": 0.3333333333333333,
+          "total_runs": 6,
+          "avg_duration": 12.142486214637756,
+          "recommendation": "unreliable"
+        },
+        "curl": {
+          "success_rate": 0.8421052631578947,
+          "priority": 0.8421052631578947,
+          "total_runs": 19,
+          "avg_duration": 2.0312168472691585,
+          "recommendation": "effective"
+        },
+        "sqlmap": {
+          "success_rate": 0.2,
+          "priority": 0.2,
+          "total_runs": 10,
+          "avg_duration": 25.192379975318907,
+          "recommendation": "unreliable"
+        },
+        "nuclei": {
+          "success_rate": 1.0,
+          "priority": 0.6,
+          "total_runs": 3,
+          "avg_duration": 448.7921901543935,
+          "recommendation": "highly_effective"
+        },
+        "dig": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 4,
+          "avg_duration": 0.36550790071487427,
+          "recommendation": "highly_effective"
+        },
+        "ffuf": {
+          "success_rate": 0.23076923076923078,
+          "priority": 0.18461538461538463,
+          "total_runs": 13,
+          "avg_duration": 129.44692760247452,
+          "recommendation": "unreliable"
+        },
+        "httpx": {
+          "success_rate": 0.0,
+          "priority": 0.0,
+          "total_runs": 4,
+          "avg_duration": 1.4886683821678162,
+          "recommendation": "never_works"
+        }
+      },
+      "tool_order_changed": false,
+      "reasoning": [
+        "Tool 'test' has 0% success rate after 3 runs - consider removing",
+        "Tool 'whatweb' has 0% success rate after 7 runs - consider removing",
+        "Tool 'hydra' highly effective (80% success) - prioritize",
+        "Tool 'wpscan' has 0% success rate after 3 runs - consider removing",
+        "Tool 'curl' highly effective (84% success) - prioritize",
+        "Tool 'dig' highly effective (100% success) - prioritize",
+        "Tool 'httpx' has 0% success rate after 4 runs - consider removing"
+      ]
+    },
+    "finding_confidence": {
+      "confidence_adjustments": {},
+      "high_confidence_techs": [
+        {
+          "technology": "nodejs",
+          "confidence": 0.95,
+          "reasoning": "Found 4 times in engagement"
+        },
+        {
+          "technology": "php",
+          "confidence": 0.95,
+          "reasoning": "Found 4 times in engagement"
+        },
+        {
+          "technology": "wordpress",
+          "confidence": 0.95,
+          "reasoning": "Found 3 times in engagement"
+        }
+      ],
+      "reasoning": [
+        "Technology 'nodejs' appears reliably (4 times)",
+        "Technology 'php' appears reliably (4 times)",
+        "Technology 'wordpress' appears reliably (3 times)"
+      ]
+    },
+    "timeouts": {
+      "timeout_adjustments": {},
+      "reasoning": []
+    },
+    "waf_handling": {
+      "waf_rules": {
+        "generic_waf": {
+          "tools_to_avoid": [
+            "gobuster",
+            "ffuf",
+            "sqlmap"
+          ],
+          "tools_to_use": [
+            "curl",
+            "dig",
+            "subfinder",
+            "nmap",
+            "gobuster",
+            "nikto",
+            "wafw00f",
+            "hydra",
+            "nuclei",
+            "ffuf",
+            "sqlmap",
+            "ssh_cmd",
+            "bash"
+          ],
+          "recommended_order": [
+            "curl",
+            "dig",
+            "nikto",
+            "hydra",
+            "nuclei",
+            "ffuf",
+            "nmap",
+            "sqlmap",
+            "bash",
+            "subfinder",
+            "gobuster",
+            "wafw00f",
+            "ssh_cmd"
+          ]
+        }
+      },
+      "blocked_tools": {},
+      "effective_tools": {},
+      "reasoning": [
+        "WAF 'generic_waf' blocks: gobuster, ffuf, sqlmap - skip these tools",
+        "Against generic_waf, use: curl, dig, subfinder"
+      ]
+    }
+  },
+  "recommendations": [
+    {
+      "type": "waf_bypass_strategy",
+      "waf": "generic_waf",
+      "tools_to_use": [
+        "subfinder",
+        "nikto",
+        "hydra",
+        "curl",
+        "ssh_cmd",
+        "nuclei",
+        "wafw00f",
+        "dig"
+      ],
+      "tools_to_avoid": [
+        "gobuster",
+        "ffuf",
+        "sqlmap"
+      ],
+      "priority": "high",
+      "reasoning": "Against generic_waf, prioritize subfinder, nikto, hydra, curl, ssh_cmd, nuclei, wafw00f, dig"
+    },
+    {
+      "type": "skip_ineffective_tools",
+      "tools": [
+        "test",
+        "whatweb",
+        "wpscan",
+        "httpx"
+      ],
+      "priority": "medium",
+      "reasoning": "Tools ['test', 'whatweb', 'wpscan', 'httpx'] never succeeded - consider skipping on similar targets"
+    }
+  ],
+  "rollback_data": {}
+}

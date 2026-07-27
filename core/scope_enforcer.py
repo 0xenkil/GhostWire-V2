@@ -4,8 +4,10 @@ from utils.logger import get_logger
 
 log = get_logger("scope_enforcer")
 
+
 class ScopeViolation(Exception):
     pass
+
 
 class ScopeEnforcer:
     def __init__(self, session):
@@ -13,6 +15,18 @@ class ScopeEnforcer:
         self._blocked_nets = [
             ipaddress.ip_network(r, strict=False) for r in BLOCKED_IP_RANGES
         ]
+        self._parsed_scope_nets = []
+        from urllib.parse import urlparse
+        for s in self.session.scope:
+            scope_target = s
+            if "://" in scope_target:
+                parsed_s = urlparse(scope_target)
+                if parsed_s.hostname:
+                    scope_target = parsed_s.hostname
+            try:
+                self._parsed_scope_nets.append(ipaddress.ip_network(scope_target, strict=False))
+            except ValueError:
+                pass
 
     def check_target(self, target: str) -> bool:
         """
@@ -23,6 +37,18 @@ class ScopeEnforcer:
         if not target:
             raise ScopeViolation("Empty target passed to scope check.")
 
+        # Normalize URL targets to a bare host for the block/range checks below.
+        # Without this, "http://blocked.com/" bypasses step 2 (it never equals
+        # "blocked.com") and "http://<protected-ip>/" bypasses step 3
+        # (ipaddress.ip_address() raises on the URL form -> caught -> skipped).
+        # _in_declared_scope already normalizes internally; only 2-3 were exposed.
+        from urllib.parse import urlparse as _urlparse
+        host = target
+        if "://" in host:
+            _p = _urlparse(host)
+            if _p.hostname:
+                host = _p.hostname
+
         # 1. Must be inside declared scope
         if not self._in_declared_scope(target):
             raise ScopeViolation(
@@ -32,15 +58,16 @@ class ScopeEnforcer:
 
         # 2. Never attack always-blocked domains
         for blocked in ALWAYS_BLOCKED_DOMAINS:
-            # Use suffix match to prevent "cloudflare.com" matching "notcloudflare.com"
-            if target == blocked or target.endswith(f".{blocked}"):
+            # Use suffix match to prevent "cloudflare.com" matching
+            # "notcloudflare.com"
+            if host == blocked or host.endswith(f".{blocked}"):
                 raise ScopeViolation(
                     f"Target '{target}' matches a globally blocked domain: {blocked}"
                 )
 
         # 3. Check if IP falls in protected ranges
         try:
-            ip = ipaddress.ip_address(target)
+            ip = ipaddress.ip_address(host)
             for net in self._blocked_nets:
                 if ip in net:
                     raise ScopeViolation(
@@ -59,7 +86,7 @@ class ScopeEnforcer:
         false positives like 'space' matching 'myspace.com'.
         """
         from urllib.parse import urlparse
-        
+
         # Normalize target: if it's a URL, extract the hostname
         check_target = target
         if "://" in check_target:
@@ -77,17 +104,20 @@ class ScopeEnforcer:
             # Exact match
             if check_target == scope_target:
                 return True
-            # Subdomain suffix match: sub.example.com is in scope if scope has example.com
+            # Subdomain suffix match: sub.example.com is in scope if scope has
+            # example.com
             if check_target.endswith(f".{scope_target}"):
                 return True
-            # CIDR range check
-            try:
-                net = ipaddress.ip_network(scope_target, strict=False)
-                ip = ipaddress.ip_address(check_target)
+                
+        # CIDR range check (pre-parsed)
+        try:
+            ip = ipaddress.ip_address(check_target)
+            for net in self._parsed_scope_nets:
                 if ip in net:
                     return True
-            except ValueError:
-                continue
+        except ValueError:
+            pass
+            
         return False
 
     def check_action(self, action: str, risk_level: str = "medium") -> bool:
@@ -96,11 +126,12 @@ class ScopeEnforcer:
         risk_level: 'low', 'medium', 'high', 'critical'
         """
         roe = self.session.rules_of_engagement
-        if risk_level == "critical" and not roe.get("allow_destructive", False):
+        if risk_level == "critical" and not roe.get(
+                "allow_destructive", False):
             raise ScopeViolation(
                 f"Action '{action}' requires destructive permission which is not granted."
             )
-        if risk_level == "high" and not roe.get("allow_exploitation", True):
+        if risk_level == "high" and not roe.get("allow_exploitation", False):
             raise ScopeViolation(
                 f"Action '{action}' requires exploitation permission which is not granted."
             )

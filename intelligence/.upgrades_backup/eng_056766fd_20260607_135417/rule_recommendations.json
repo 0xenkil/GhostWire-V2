@@ -1,0 +1,36 @@
+[
+  {
+    "type": "waf_bypass_strategy",
+    "waf": "generic_waf",
+    "tools_to_use": [
+      "nikto",
+      "subfinder",
+      "curl",
+      "bash",
+      "httpx",
+      "ssh_cmd",
+      "sslscan",
+      "sqlmap",
+      "wafw00f",
+      "dig"
+    ],
+    "tools_to_avoid": [
+      "whatweb",
+      "gobuster",
+      "ffuf",
+      "wpscan"
+    ],
+    "priority": "high",
+    "reasoning": "Against generic_waf, prioritize nikto, subfinder, curl, bash, httpx, ssh_cmd, sslscan, sqlmap, wafw00f, dig"
+  },
+  {
+    "type": "skip_ineffective_tools",
+    "tools": [
+      "amass",
+      "commix",
+      "wpscan"
+    ],
+    "priority": "medium",
+    "reasoning": "Tools ['amass', 'commix', 'wpscan'] never succeeded - consider skipping on similar targets"
+  }
+]

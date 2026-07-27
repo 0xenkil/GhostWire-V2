@@ -1,21 +1,27 @@
-from config import (
+from config_thresholds import (
     TOOL_NMAP_TIMEOUT, TOOL_MASSCAN_TIMEOUT, TOOL_NUCLEI_TIMEOUT,
     TOOL_GOBUSTER_TIMEOUT, TOOL_FFUF_TIMEOUT, TOOL_METASPLOIT_TIMEOUT,
     TOOL_WAF_TIMEOUT
 )
 
+import json
+from pathlib import Path
+from utils.logger import get_logger
+
+log = get_logger("tool_registry")
+
 TOOL_TIMEOUTS = {
-    "nikto":       600,
-    "nuclei":      TOOL_NUCLEI_TIMEOUT,
-    "sslscan":     180,
-    "whatweb":     90,
-    "gobuster":    TOOL_GOBUSTER_TIMEOUT,
-    "ffuf":        TOOL_FFUF_TIMEOUT,
-    "masscan":     TOOL_MASSCAN_TIMEOUT,
-    "nmap":        TOOL_NMAP_TIMEOUT,
-    "hydra":       240,
-    "sqlmap":      300,
-    "default":     120,
+    "nikto": 600,
+    "nuclei": TOOL_NUCLEI_TIMEOUT,
+    "sslscan": 180,
+    "whatweb": 90,
+    "gobuster": TOOL_GOBUSTER_TIMEOUT,
+    "ffuf": TOOL_FFUF_TIMEOUT,
+    "masscan": TOOL_MASSCAN_TIMEOUT,
+    "nmap": TOOL_NMAP_TIMEOUT,
+    "hydra": 240,
+    "sqlmap": 300,
+    "default": 120,
 }
 
 # ── V6: Virtual & AI-Driven Tools ───────────────────────────
@@ -30,9 +36,10 @@ VIRTUAL_AI_TOOLS = {
     "ai_dynamic_recon", "ai_dynamic_exploit", "react_payload", "python_payload"
 }
 
-# Tools that primarily use HTTP/S and benefit from WAF evasion/TLS circuit breaking
+# Tools that primarily use HTTP/S and benefit from WAF evasion/TLS circuit
+# breaking
 HTTP_TOOLS = {
-    "curl", "nikto", "ffuf", "gobuster", "dirb", "dirsearch", 
+    "curl", "nikto", "ffuf", "gobuster", "dirb", "dirsearch",
     "whatweb", "wafw00f", "sslscan", "dalfox", "wget"
 }
 
@@ -46,7 +53,13 @@ STREAMING_TOOLS = {
 FAST_TOOLS = {"dig", "curl", "whois", "nc"}
 
 # Command wrappers that shouldn't be counted as the primary tool in validation
-WRAPPER_TOOLS = {"timeout", "sudo", "env", "nice", "proxychains4", "proxychains"}
+WRAPPER_TOOLS = {
+    "timeout",
+    "sudo",
+    "env",
+    "nice",
+    "proxychains4",
+    "proxychains"}
 
 # Tools that write to a file (-o, -oG, -oN, etc.) - prefer file readback on VPS
 FILE_OUTPUT_TOOLS = {"nuclei", "nmap", "nikto", "masscan", "gobuster"}
@@ -54,43 +67,31 @@ FILE_OUTPUT_TOOLS = {"nuclei", "nmap", "nikto", "masscan", "gobuster"}
 # Tool fallback mappings: if primary tool unavailable, use alternatives
 # Phase 4 Fix: Expanded fallback chains to improve resilience
 TOOL_FALLBACKS = {
-    "nuclei": ["nikto", "ffuf", "curl"],           # if nuclei fails, try nikto web scanner
-    "nikto": ["gobuster", "ffuf", "curl"],        # if nikto fails, try dir brute-force
+    # if nuclei fails, try nikto web scanner
+    "nuclei": ["nikto", "ffuf", "curl"],
+    # if nikto fails, try dir brute-force
+    "nikto": ["gobuster", "ffuf", "curl"],
     "gobuster": ["ffuf", "dirbuster", "curl"],    # if gobuster fails, try ffuf
-    "ffuf": ["gobuster", "curl"],                  # if ffuf fails, try gobuster
-    "nmap": ["masscan", "curl"],                   # if nmap fails, try masscan port scan
+    # if ffuf fails, try gobuster
+    "ffuf": ["gobuster", "curl"],
+    # if nmap fails, try masscan port scan
+    "nmap": ["masscan", "curl"],
     "masscan": ["nmap", "curl"],                   # if masscan fails, try nmap
-    "curl": ["wget", "nc"],                        # if curl network fails, try wget
+    # if curl network fails, try wget
+    "curl": ["wget", "nc"],
     "wget": ["curl"],                              # if wget fails, try curl
-    "sqlmap": ["curl", "nikto"],                   # if sqlmap fails, try manual curl probes
-    "theharvester": ["curl", "dig"],               # if theharvester fails, try dig
+    # if sqlmap fails, try manual curl probes
+    "sqlmap": ["curl", "nikto"],
+    # if theharvester fails, try dig
+    "theharvester": ["curl", "dig"],
     "dig": ["nslookup", "host"],                   # if dig fails, try nslookup
-    "subfinder": ["amass", "curl"],                # if subfinder fails, try amass
-    "amass": ["subfinder", "curl"],                # if amass fails, try subfinder
+    # if subfinder fails, try amass
+    "subfinder": ["amass", "curl"],
+    # if amass fails, try subfinder
+    "amass": ["subfinder", "curl"],
 }
 
 TOOL_REGISTRY = {
-    "nmap": {
-        "binary": "nmap",
-        "install": "apt-get update && apt-get install -y nmap dnsutils",
-        "category": "scanning",
-        "timeout": TOOL_NMAP_TIMEOUT,
-        "description": "Network port scanner",
-    },
-    "masscan": {
-        "binary": "masscan",
-        "install": "apt-get update && apt-get install -y masscan",
-        "category": "scanning",
-        "timeout": TOOL_MASSCAN_TIMEOUT,
-        "description": "Fast port scanner",
-    },
-    "nikto": {
-        "binary": "nikto",
-        "install": "apt-get install -y nikto",
-        "category": "web",
-        "timeout": 600,
-        "description": "Web server vulnerability scanner",
-    },
     "nuclei": {
         "binary": "nuclei",
         "timeout": TOOL_NUCLEI_TIMEOUT,
@@ -106,8 +107,30 @@ TOOL_REGISTRY = {
             "/usr/local/bin/nuclei -ut -silent || true"
         ),
         "category": "vulnerability",
-        "description": "Template-based vulnerability scanner",
+        "description": "Template-based vulnerability scanner. Target URL must include http:// or https:// scheme.",
     },
+    "nmap": {
+        "binary": "nmap",
+        "install": "apt-get update && apt-get install -y nmap dnsutils",
+        "category": "scanning",
+        "timeout": TOOL_NMAP_TIMEOUT,
+        "description": "Network port scanner. CRITICAL CONSTRAINT: Always use -T4 for speed and avoid interactive flags.",
+    },
+    "masscan": {
+        "binary": "masscan",
+        "install": "apt-get update && apt-get install -y masscan",
+        "category": "scanning",
+        "timeout": TOOL_MASSCAN_TIMEOUT,
+        "description": "Fast port scanner. CRITICAL CONSTRAINT: You MUST prefix this command with 'sudo'. ONLY accepts IP addresses or CIDR ranges. NEVER pass a domain name or hostname. The IP MUST be the very last argument.",
+    },
+    "nikto": {
+        "binary": "nikto",
+        "install": "apt-get install -y nikto libnet-ssleay-perl",
+        "category": "web",
+        "timeout": 600,
+        "description": "Web server vulnerability scanner. CRITICAL CONSTRAINT: MUST pass target with -h <URL>.",
+    },
+
     "ffuf": {
         "binary": "ffuf",
         "install": (
@@ -121,14 +144,14 @@ TOOL_REGISTRY = {
         ),
         "category": "web",
         "timeout": TOOL_FFUF_TIMEOUT,
-        "description": "Web fuzzer",
+        "description": "Web fuzzer. CRITICAL CONSTRAINT: Must use -w with a wordlist and the target URL MUST contain the word FUZZ.",
     },
     "gobuster": {
         "binary": "gobuster",
         "install": "apt-get install -y gobuster",
         "category": "recon",
         "timeout": TOOL_GOBUSTER_TIMEOUT,
-        "description": "URI and DNS subdomain brute-forcer",
+        "description": "URI and DNS subdomain brute-forcer. CRITICAL CONSTRAINT: Use 'gobuster dir -u <URL> -w <wordlist>' for directories.",
     },
     "dirb": {
         "binary": "dirb",
@@ -137,19 +160,26 @@ TOOL_REGISTRY = {
         "timeout": 300,
         "description": "Web directory scanner",
     },
+    "wpscan": {
+        "binary": "wpscan",
+        "install": "apt-get install -y ruby-dev && gem install wpscan",
+        "category": "recon",
+        "timeout": 600,
+        "description": "WordPress vulnerability scanner",
+    },
     "sqlmap": {
         "binary": "sqlmap",
         "install": "apt-get install -y sqlmap",
         "category": "exploitation",
         "timeout": 600,
-        "description": "SQL injection tool",
+        "description": "SQL injection tool. CRITICAL CONSTRAINT: MUST include --batch to run non-interactively.",
     },
     "hydra": {
         "binary": "hydra",
         "install": "apt-get install -y hydra",
         "category": "exploitation",
         "timeout": 360,
-        "description": "Login brute forcer",
+        "description": "Login brute-forcer. CRITICAL CONSTRAINT: Do not prompt for input.",
     },
     "msfconsole": {
         "binary": "msfconsole",
@@ -160,7 +190,7 @@ TOOL_REGISTRY = {
         ),
         "category": "exploitation",
         "timeout": TOOL_METASPLOIT_TIMEOUT,
-        "description": "Metasploit framework",
+        "description": "Metasploit framework. CRITICAL CONSTRAINT: MUST be run non-interactively using: msfconsole -q -x 'use <module>; set RHOSTS <target>; run; exit'",
     },
     "enum4linux": {
         "binary": "enum4linux",
@@ -207,8 +237,8 @@ TOOL_REGISTRY = {
         "binary": "curl",
         "install": "apt-get install -y curl",
         "category": "web",
-        "timeout": 30,
-        "description": "HTTP client",
+        "timeout": 60,
+        "description": "Command line HTTP client. CRITICAL CONSTRAINT: ALWAYS use -s (silent) and -L (follow redirects).",
     },
     "smbclient": {
         "binary": "smbclient",
@@ -292,9 +322,15 @@ TOOL_REGISTRY = {
     },
     "whatweb": {
         "binary": "whatweb",
-        "install": "apt-get install -y whatweb",
+        "install": (
+            "apt-get update && apt-get install -y ruby ruby-dev git --no-install-recommends; "
+            "rm -rf /opt/whatweb; "
+            "git clone https://github.com/urbanadventurer/WhatWeb.git /opt/whatweb; "
+            "ln -sf /opt/whatweb/whatweb /usr/local/bin/whatweb; "
+            "chmod +x /opt/whatweb/whatweb"
+        ),
         "category": "recon",
-        "timeout": 90,
+        "timeout": 180,
         "description": "Web stack fingerprinting tool",
     },
     "ai_dynamic_recon": {
@@ -337,3 +373,37 @@ TOOL_REGISTRY = {
         "description": "Subdomain enumeration via active/passive discovery",
     },
 }
+
+
+def register_tool(name: str, config: dict) -> None:
+    """Register a new tool dynamically."""
+    TOOL_REGISTRY[name] = config
+
+    # Dynamically update related sets based on properties
+    timeout = config.get("timeout", 120)
+    TOOL_TIMEOUTS[name] = timeout
+
+    # Ensure fallbacks are registered if provided
+    if "fallbacks" in config:
+        TOOL_FALLBACKS[name] = config["fallbacks"]
+
+    log.info(f"Dynamically registered tool: {name}")
+
+
+def load_custom_tools(tools_dir: str) -> None:
+    """Load all custom tools from JSON files in the specified directory."""
+    dir_path = Path(tools_dir)
+    if not dir_path.exists():
+        return
+
+    for file_path in dir_path.glob("*.json"):
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    for tool_name, tool_config in data.items():
+                        register_tool(tool_name, tool_config)
+        except Exception as e:
+            log.warning(
+                f"Failed to load custom tool from {
+                    file_path.name}: {e}")

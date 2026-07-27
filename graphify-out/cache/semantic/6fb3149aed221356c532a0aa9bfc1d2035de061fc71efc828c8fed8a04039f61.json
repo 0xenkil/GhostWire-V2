@@ -1,0 +1,1 @@
+{"nodes": [], "edges": [{"source": "core_ai_backend", "target": "config_backends", "relation": "references", "confidence": "EXTRACTED", "confidence_score": 1.0, "source_file": "summary_2.md", "source_location": null, "weight": 1.0}], "hyperedges": []}

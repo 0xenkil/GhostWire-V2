@@ -1,0 +1,17 @@
+{
+  "tool_stats": {
+    "test_tool": {
+      "wordpress": {
+        "success_count": 0,
+        "fail_count": 1,
+        "total_time": 0.0,
+        "total_runs": 1,
+        "error_patterns": {
+          "TIMEOUT": 1
+        }
+      }
+    }
+  },
+  "target_profiles": {},
+  "engagement_results": []
+}

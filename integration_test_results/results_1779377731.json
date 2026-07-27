@@ -1,0 +1,75 @@
+{
+  "test_start": "2026-05-21T21:05:31.245762",
+  "scenarios": [
+    {
+      "name": "Simple HTTP localhost (pentest)",
+      "target": "http://127.0.0.1:8080",
+      "phases": {
+        "planning": {
+          "status": "fail",
+          "duration": 0.00018095970153808594,
+          "error": "BaseAgent.__init__() got an unexpected keyword argument 'agent_name'",
+          "result": null
+        },
+        "recon": {
+          "status": "fail",
+          "duration": 0.00010013580322265625,
+          "error": "BaseAgent.__init__() got an unexpected keyword argument 'agent_name'",
+          "result": null
+        },
+        "exploitation": {
+          "status": "fail",
+          "duration": 8.559226989746094e-05,
+          "error": "BaseAgent.__init__() got an unexpected keyword argument 'agent_name'",
+          "result": null
+        },
+        "reporting": {
+          "status": "fail",
+          "duration": 7.939338684082031e-05,
+          "error": "BaseAgent.__init__() got an unexpected keyword argument 'agent_name'",
+          "result": null
+        }
+      },
+      "overall_status": "fail",
+      "total_duration": 0.008545637130737305
+    },
+    {
+      "name": "HTTPS localhost (pentest)",
+      "target": "https://127.0.0.1:8443",
+      "phases": {
+        "planning": {
+          "status": "fail",
+          "duration": 0.00011324882507324219,
+          "error": "BaseAgent.__init__() got an unexpected keyword argument 'agent_name'",
+          "result": null
+        },
+        "recon": {
+          "status": "fail",
+          "duration": 6.031990051269531e-05,
+          "error": "BaseAgent.__init__() got an unexpected keyword argument 'agent_name'",
+          "result": null
+        },
+        "exploitation": {
+          "status": "fail",
+          "duration": 3.552436828613281e-05,
+          "error": "BaseAgent.__init__() got an unexpected keyword argument 'agent_name'",
+          "result": null
+        },
+        "reporting": {
+          "status": "fail",
+          "duration": 3.218650817871094e-05,
+          "error": "BaseAgent.__init__() got an unexpected keyword argument 'agent_name'",
+          "result": null
+        }
+      },
+      "overall_status": "fail",
+      "total_duration": 0.005871772766113281
+    }
+  ],
+  "summary": {
+    "total": 2,
+    "passed": 0,
+    "failed": 2,
+    "success_rate_pct": 0.0
+  }
+}

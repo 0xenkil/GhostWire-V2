@@ -1,0 +1,68 @@
+[
+  {
+    "name": "curl_stealth_headers",
+    "applies_to": [
+      "curl"
+    ],
+    "weight": 1.0,
+    "success_count": 31,
+    "failure_count": 0,
+    "last_success": 1779267472.6061,
+    "last_failure": null
+  },
+  {
+    "name": "curl_slow",
+    "applies_to": [
+      "curl"
+    ],
+    "weight": 1.0,
+    "success_count": 31,
+    "failure_count": 0,
+    "last_success": 1779267472.6070273,
+    "last_failure": null
+  },
+  {
+    "name": "curl_http2",
+    "applies_to": [
+      "curl"
+    ],
+    "weight": 1.0,
+    "success_count": 31,
+    "failure_count": 0,
+    "last_success": 1779267472.6079063,
+    "last_failure": null
+  },
+  {
+    "name": "sqlmap_tamper",
+    "applies_to": [
+      "sqlmap"
+    ],
+    "weight": 1.0,
+    "success_count": 0,
+    "failure_count": 0,
+    "last_success": null,
+    "last_failure": null
+  },
+  {
+    "name": "nuclei_rate_limit",
+    "applies_to": [
+      "nuclei"
+    ],
+    "weight": 1.0,
+    "success_count": 0,
+    "failure_count": 0,
+    "last_success": null,
+    "last_failure": null
+  },
+  {
+    "name": "ffuf_jitter",
+    "applies_to": [
+      "ffuf"
+    ],
+    "weight": 1.0,
+    "success_count": 1,
+    "failure_count": 0,
+    "last_success": null,
+    "last_failure": null
+  }
+]

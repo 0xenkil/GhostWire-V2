@@ -1,0 +1,85 @@
+{
+  "timestamp": "2026-05-06T19:38:02.843302",
+  "engagement_id": "eng_a68e3570",
+  "changes": {
+    "tool_effectiveness": {
+      "tool_rates_adjusted": {
+        "ai_prescribed": {
+          "success_rate": 0.0,
+          "priority": 0.0,
+          "total_runs": 11,
+          "avg_duration": 0.25884821198203345,
+          "recommendation": "never_works"
+        },
+        "ai_recon": {
+          "success_rate": 0.0,
+          "priority": 0.0,
+          "total_runs": 3,
+          "avg_duration": 0.5731209913889567,
+          "recommendation": "never_works"
+        },
+        "dig": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 4,
+          "avg_duration": 0.23015302419662476,
+          "recommendation": "highly_effective"
+        }
+      },
+      "tool_order_changed": false,
+      "reasoning": [
+        "Tool 'ai_prescribed' has 0% success rate after 11 runs - consider removing",
+        "Tool 'ai_recon' has 0% success rate after 3 runs - consider removing",
+        "Tool 'dig' highly effective (100% success) - prioritize"
+      ]
+    },
+    "finding_confidence": {
+      "confidence_adjustments": {},
+      "high_confidence_techs": [],
+      "reasoning": []
+    },
+    "timeouts": {
+      "timeout_adjustments": {},
+      "reasoning": []
+    },
+    "waf_handling": {
+      "waf_rules": {
+        "generic_waf": {
+          "tools_to_avoid": [],
+          "tools_to_use": [
+            "dig"
+          ],
+          "recommended_order": [
+            "dig"
+          ],
+          "top_evasion_vectors": []
+        }
+      },
+      "blocked_tools": {},
+      "effective_tools": {},
+      "evasion_priorities": {},
+      "reasoning": [
+        "Against generic_waf, use: dig"
+      ]
+    }
+  },
+  "recommendations": [
+    {
+      "type": "waf_defense_policy",
+      "waf": "generic_waf",
+      "tools_to_avoid": [],
+      "priority": "high",
+      "reasoning": "generic_waf detected - keep validation low-rate, record block evidence, and stop commands that trigger WAF/rate-limit/CAPTCHA responses"
+    },
+    {
+      "type": "skip_ineffective_tools",
+      "tools": [
+        "ai_prescribed",
+        "ai_recon"
+      ],
+      "priority": "medium",
+      "reasoning": "Tools ['ai_prescribed', 'ai_recon'] never succeeded - consider skipping on similar targets"
+    }
+  ],
+  "rollback_data": {}
+}

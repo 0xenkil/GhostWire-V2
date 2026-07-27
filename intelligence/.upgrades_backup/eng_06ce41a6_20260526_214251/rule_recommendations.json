@@ -1,0 +1,23 @@
+[
+  {
+    "type": "waf_bypass_strategy",
+    "waf": "generic_waf",
+    "tools_to_use": [
+      "subfinder",
+      "dig",
+      "nmap",
+      "whatweb"
+    ],
+    "tools_to_avoid": [],
+    "priority": "high",
+    "reasoning": "Against generic_waf, prioritize subfinder, dig, nmap, whatweb"
+  },
+  {
+    "type": "skip_ineffective_tools",
+    "tools": [
+      "ssh_cmd"
+    ],
+    "priority": "medium",
+    "reasoning": "Tools ['ssh_cmd'] never succeeded - consider skipping on similar targets"
+  }
+]

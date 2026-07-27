@@ -1,0 +1,75 @@
+{
+  "test_start": "2026-05-21T21:06:15.047673",
+  "scenarios": [
+    {
+      "name": "Simple HTTP localhost (pentest)",
+      "target": "http://127.0.0.1:8080",
+      "phases": {
+        "planning": {
+          "status": "pass",
+          "duration": 0.032254695892333984,
+          "error": null,
+          "result": "PhaseResult(phase='planning', status=<ResultStatus.SUCCESS: 'success'>, timestamp=1779377775.0857134, data={'target': '', 'scope': ['http://127.0.0.1:8080'], 'analysis': '', 'findings': [{'type': 'engagement_plan', 'target': '', 'detail': \"Mode=pentest, Scope=['http://127.0.0.1:8080'], ROE={'allow_exploitation': True, 'allow_destructive': False}\", 'severity': 'info', 'source_tool': 'planning', 'command': ''}]}, tools_executed=0, tools_succeeded=0, tools_failed=0, total_runtime_seconds=0.0, error_message=\"Scope confirmed: ['http://127.0.0.1:8080']\", exception_traceback=None, is_valid=True, validation_errors=[])"
+        },
+        "recon": {
+          "status": "fail",
+          "duration": 1.4676835536956787,
+          "error": "'NoneType' object has no attribute 'run'",
+          "result": null
+        },
+        "exploitation": {
+          "status": "fail",
+          "duration": 0.004655361175537109,
+          "error": "'NoneType' object has no attribute 'remote'",
+          "result": null
+        },
+        "reporting": {
+          "status": "pass",
+          "duration": 0.10996246337890625,
+          "error": null,
+          "result": "PhaseResult(phase='reporting', status=<ResultStatus.SUCCESS: 'success'>, timestamp=1779377776.6683037, data={'report_path': 'C:\\\\Users\\\\ASUS\\\\Desktop\\\\red team\\\\results\\\\eng_9dfb88ce\\\\report\\\\final_report.md', 'json_path': 'C:\\\\Users\\\\ASUS\\\\Desktop\\\\red team\\\\results\\\\eng_9dfb88ce\\\\report\\\\findings.json', 'findings': []}, tools_executed=0, tools_succeeded=0, tools_failed=0, total_runtime_seconds=0.0, error_message='Report at C:\\\\Users\\\\ASUS\\\\Desktop\\\\red team\\\\results\\\\eng_9dfb88ce\\\\report\\\\final_report.md', exception_traceback=None, is_valid=True, validation_errors=[])"
+        }
+      },
+      "overall_status": "fail",
+      "total_duration": 1.6203203201293945
+    },
+    {
+      "name": "HTTPS localhost (pentest)",
+      "target": "https://127.0.0.1:8443",
+      "phases": {
+        "planning": {
+          "status": "pass",
+          "duration": 0.028285741806030273,
+          "error": null,
+          "result": "PhaseResult(phase='planning', status=<ResultStatus.SUCCESS: 'success'>, timestamp=1779377776.7009547, data={'target': '', 'scope': ['https://127.0.0.1:8443'], 'analysis': '', 'findings': [{'type': 'engagement_plan', 'target': '', 'detail': \"Mode=pentest, Scope=['https://127.0.0.1:8443'], ROE={'allow_exploitation': True, 'allow_destructive': False}\", 'severity': 'info', 'source_tool': 'planning', 'command': ''}]}, tools_executed=0, tools_succeeded=0, tools_failed=0, total_runtime_seconds=0.0, error_message=\"Scope confirmed: ['https://127.0.0.1:8443']\", exception_traceback=None, is_valid=True, validation_errors=[])"
+        },
+        "recon": {
+          "status": "fail",
+          "duration": 1.4186010360717773,
+          "error": "'NoneType' object has no attribute 'run'",
+          "result": null
+        },
+        "exploitation": {
+          "status": "fail",
+          "duration": 0.005167484283447266,
+          "error": "'NoneType' object has no attribute 'remote'",
+          "result": null
+        },
+        "reporting": {
+          "status": "pass",
+          "duration": 0.03826618194580078,
+          "error": null,
+          "result": "PhaseResult(phase='reporting', status=<ResultStatus.SUCCESS: 'success'>, timestamp=1779377778.1634529, data={'report_path': 'C:\\\\Users\\\\ASUS\\\\Desktop\\\\red team\\\\results\\\\eng_b30430c2\\\\report\\\\final_report.md', 'json_path': 'C:\\\\Users\\\\ASUS\\\\Desktop\\\\red team\\\\results\\\\eng_b30430c2\\\\report\\\\findings.json', 'findings': []}, tools_executed=0, tools_succeeded=0, tools_failed=0, total_runtime_seconds=0.0, error_message='Report at C:\\\\Users\\\\ASUS\\\\Desktop\\\\red team\\\\results\\\\eng_b30430c2\\\\report\\\\final_report.md', exception_traceback=None, is_valid=True, validation_errors=[])"
+        }
+      },
+      "overall_status": "fail",
+      "total_duration": 1.494795799255371
+    }
+  ],
+  "summary": {
+    "total": 2,
+    "passed": 0,
+    "failed": 2,
+    "success_rate_pct": 0.0
+  }
+}

@@ -1,0 +1,75 @@
+{
+  "test_start": "2026-05-21T21:05:21.297840",
+  "scenarios": [
+    {
+      "name": "Simple HTTP localhost (pentest)",
+      "target": "http://127.0.0.1:8080",
+      "phases": {
+        "planning": {
+          "status": "fail",
+          "duration": 0.00021719932556152344,
+          "error": "MessageBus.__init__() missing 2 required positional arguments: 'state_store' and 'engagement_id'",
+          "result": null
+        },
+        "recon": {
+          "status": "fail",
+          "duration": 5.2928924560546875e-05,
+          "error": "MessageBus.__init__() missing 2 required positional arguments: 'state_store' and 'engagement_id'",
+          "result": null
+        },
+        "exploitation": {
+          "status": "fail",
+          "duration": 4.887580871582031e-05,
+          "error": "MessageBus.__init__() missing 2 required positional arguments: 'state_store' and 'engagement_id'",
+          "result": null
+        },
+        "reporting": {
+          "status": "fail",
+          "duration": 3.62396240234375e-05,
+          "error": "MessageBus.__init__() missing 2 required positional arguments: 'state_store' and 'engagement_id'",
+          "result": null
+        }
+      },
+      "overall_status": "fail",
+      "total_duration": 0.025131940841674805
+    },
+    {
+      "name": "HTTPS localhost (pentest)",
+      "target": "https://127.0.0.1:8443",
+      "phases": {
+        "planning": {
+          "status": "fail",
+          "duration": 0.00015306472778320312,
+          "error": "MessageBus.__init__() missing 2 required positional arguments: 'state_store' and 'engagement_id'",
+          "result": null
+        },
+        "recon": {
+          "status": "fail",
+          "duration": 3.719329833984375e-05,
+          "error": "MessageBus.__init__() missing 2 required positional arguments: 'state_store' and 'engagement_id'",
+          "result": null
+        },
+        "exploitation": {
+          "status": "fail",
+          "duration": 2.5987625122070312e-05,
+          "error": "MessageBus.__init__() missing 2 required positional arguments: 'state_store' and 'engagement_id'",
+          "result": null
+        },
+        "reporting": {
+          "status": "fail",
+          "duration": 5.745887756347656e-05,
+          "error": "MessageBus.__init__() missing 2 required positional arguments: 'state_store' and 'engagement_id'",
+          "result": null
+        }
+      },
+      "overall_status": "fail",
+      "total_duration": 0.006197690963745117
+    }
+  ],
+  "summary": {
+    "total": 2,
+    "passed": 0,
+    "failed": 2,
+    "success_rate_pct": 0.0
+  }
+}

@@ -1,0 +1,22 @@
+[
+  {
+    "type": "waf_bypass_strategy",
+    "waf": "cloudflare",
+    "tools_to_use": [
+      "ffuf",
+      "subfinder",
+      "dig",
+      "wafw00f",
+      "sslscan",
+      "amass",
+      "httpx",
+      "gobuster",
+      "nmap",
+      "whatweb",
+      "nikto"
+    ],
+    "tools_to_avoid": [],
+    "priority": "high",
+    "reasoning": "Against cloudflare, prioritize ffuf, subfinder, dig, wafw00f, sslscan, amass, httpx, gobuster, nmap, whatweb, nikto"
+  }
+]

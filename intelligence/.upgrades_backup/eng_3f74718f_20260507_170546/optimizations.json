@@ -1,0 +1,133 @@
+{
+  "timestamp": "2026-05-07T17:05:46.756918",
+  "engagement_id": "eng_3f74718f",
+  "changes": {
+    "tool_effectiveness": {
+      "tool_rates_adjusted": {
+        "dig": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 4,
+          "avg_duration": 0.20764684677124023,
+          "recommendation": "highly_effective"
+        },
+        "nikto": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 3,
+          "avg_duration": 0.6088055769602457,
+          "recommendation": "highly_effective"
+        },
+        "subfinder": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 2,
+          "avg_duration": 5.556720495223999,
+          "recommendation": "highly_effective"
+        },
+        "sqlmap": {
+          "success_rate": 0.0,
+          "priority": 0.0,
+          "total_runs": 4,
+          "avg_duration": 91.12631034851074,
+          "recommendation": "never_works"
+        },
+        "nuclei": {
+          "success_rate": 0.0,
+          "priority": 0.0,
+          "total_runs": 7,
+          "avg_duration": 88.77346467971802,
+          "recommendation": "never_works"
+        },
+        "nmap": {
+          "success_rate": 0.2857142857142857,
+          "priority": 0.2857142857142857,
+          "total_runs": 7,
+          "avg_duration": 86.64444902965,
+          "recommendation": "unreliable"
+        },
+        "whatweb": {
+          "success_rate": 1.0,
+          "priority": 1.0,
+          "total_runs": 2,
+          "avg_duration": 4.695758104324341,
+          "recommendation": "highly_effective"
+        }
+      },
+      "tool_order_changed": false,
+      "reasoning": [
+        "Tool 'dig' highly effective (100% success) - prioritize",
+        "Tool 'nikto' highly effective (100% success) - prioritize",
+        "Tool 'subfinder' highly effective (100% success) - prioritize",
+        "Tool 'sqlmap' has 0% success rate after 4 runs - consider removing",
+        "Tool 'nuclei' has 0% success rate after 7 runs - consider removing",
+        "Tool 'whatweb' highly effective (100% success) - prioritize"
+      ]
+    },
+    "finding_confidence": {
+      "confidence_adjustments": {},
+      "high_confidence_techs": [],
+      "reasoning": []
+    },
+    "timeouts": {
+      "timeout_adjustments": {},
+      "reasoning": []
+    },
+    "waf_handling": {
+      "waf_rules": {
+        "generic_waf": {
+          "tools_to_avoid": [
+            "sqlmap"
+          ],
+          "tools_to_use": [
+            "curl",
+            "dig",
+            "whatweb",
+            "nmap",
+            "subfinder",
+            "nikto",
+            "ffuf"
+          ],
+          "recommended_order": [
+            "dig",
+            "nikto",
+            "whatweb",
+            "nmap",
+            "subfinder",
+            "curl",
+            "ffuf"
+          ],
+          "top_evasion_vectors": []
+        }
+      },
+      "blocked_tools": {},
+      "effective_tools": {},
+      "evasion_priorities": {},
+      "reasoning": [
+        "WAF 'generic_waf' blocks: sqlmap - skip these tools",
+        "Against generic_waf, use: curl, dig, whatweb"
+      ]
+    }
+  },
+  "recommendations": [
+    {
+      "type": "waf_defense_policy",
+      "waf": "generic_waf",
+      "tools_to_avoid": [
+        "sqlmap"
+      ],
+      "priority": "high",
+      "reasoning": "generic_waf detected - keep validation low-rate, record block evidence, and stop commands that trigger WAF/rate-limit/CAPTCHA responses"
+    },
+    {
+      "type": "skip_ineffective_tools",
+      "tools": [
+        "sqlmap",
+        "nuclei"
+      ],
+      "priority": "medium",
+      "reasoning": "Tools ['sqlmap', 'nuclei'] never succeeded - consider skipping on similar targets"
+    }
+  ],
+  "rollback_data": {}
+}

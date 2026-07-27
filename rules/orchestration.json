@@ -1,0 +1,50 @@
+{
+  "phase_orchestration": {
+    "pentest_mode": {
+      "description": "Pentest mode: abbreviated 4-phase assessment",
+      "phases": ["planning", "recon", "exploitation", "reporting"],
+      "phase_requires": {
+        "planning": [],
+        "recon": ["planning"],
+        "exploitation": ["recon"],
+        "reporting": ["exploitation"]
+      },
+      "blocking_statuses": ["error", "failure", "skipped", "validation_error", "unknown", null],
+      "non_blocking_statuses": ["success", "timeout", "partial"],
+      "phase_timeouts": {
+        "planning": 300,
+        "recon": 3600,
+        "exploitation": 7200,
+        "reporting": 600
+      }
+    },
+    "redteam_mode": {
+      "description": "Red team mode: full 7-phase engagement",
+      "phases": ["planning", "recon", "exploitation", "weaponization", "persistence", "objectives", "reporting"],
+      "phase_requires": {
+        "planning": [],
+        "recon": ["planning"],
+        "exploitation": ["recon"],
+        "weaponization": ["exploitation"],
+        "persistence": ["exploitation"],
+        "objectives": ["exploitation"],
+        "reporting": ["exploitation"]
+      },
+      "blocking_statuses": ["error", "failure", "skipped", "validation_error", "unknown", null],
+      "non_blocking_statuses": ["success", "timeout", "partial"],
+      "phase_timeouts": {
+        "planning": 300,
+        "recon": 3600,
+        "exploitation": 7200,
+        "weaponization": 1800,
+        "persistence": 1800,
+        "objectives": 1800,
+        "reporting": 600
+      }
+    },
+    "phase_semantics": {
+      "blocking_statuses_description": "Phases with these statuses block their dependents: error, failure, skipped, validation_error, unknown, null.",
+      "timeout_handling": "Timed-out phases produced partial results; downstream phases (persistence, objectives) should attempt execution against whatever findings were made."
+    }
+  }
+}
