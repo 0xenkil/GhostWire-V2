@@ -1,1 +1,0 @@
-{"nodes": [], "edges": [{"source": "tool_manager_tool_result", "target": "result_contracts_tool_result", "relation": "semantically_similar_to", "confidence": "EXTRACTED", "confidence_score": 1.0, "source_file": "comp_0.txt", "source_location": null, "weight": 1.0}], "hyperedges": []}

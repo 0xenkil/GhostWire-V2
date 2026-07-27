@@ -1,65 +1,73 @@
-# Environments & API Keys
+# Environment & Secret files
 .env
-.env.local
-*.env
+.env.*
+!.env.example
 .venv/
 env/
 venv/
 
-# Results & Logs
-results/
-logs/
-*.log
-clean_log*.txt
-cleaned_log*.txt
-parsed_cli.txt
-parsed_log.txt
-last ran*.txt
-last_ran*.txt
-my_messages.txt
-clean_messages.txt
-errors*.txt
-failures*.txt
-findings*.txt
-all_chats_compiled.txt
-all_subscripts.txt
-all_summaries_concat.txt
-compressed_chunk.txt
-filtered_blocks.txt
-extracted_*.txt
-deep_audit_results.txt
-flake8_*.txt
-flake8_*.log
-real_integration_test.log
-live_run_novalink.log
-debug*.log
-subagent_results.txt
-medium_mentions.txt
-comp_*.txt
-wrapped_summaries.txt
-
-# Databases & Cache
-*.db
-*.sqlite
-*.sqlite3
+# Python Cache & Build Artifacts
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# Runtime Data, Logs & Session State
+logs/
+results/
+state/
+*.log
+*.db
+*.sqlite
+*.sqlite3
+*-shm
+*-wal
+ghostwire.db
+tool_metrics.json
+unused_*.json
+
+# Scratch & Temporary Analysis Scripts
+scratch/
+scratch_*.py
+*.txt
+!requirements.txt
+summary_*.md
+AUDIT_*.md
+BUG_*.md
+BUGS_*.md
+AUTO_UPGRADE_*.md
+COMPREHENSIVE_*.md
+COMPLETE_*.md
+FINAL_*.md
+FIX_*.md
+HARDCODING_*.md
+IMPLEMENTATION_*.md
+INTELLIGENCE_*.md
+PHASE_*.md
+RED_TEAM_*.md
+README_KEYS.md
+AI_INTELLIGENCE_README.md
+full_analysis_report.md
+subagent_summaries.md
+1
+index.html
+google-chrome-stable_*.deb
+wget-log*
+graphify-out/
+integration_test_results/
+stress_test_results/
+intelligence/.upgrades_backup/
+
+# IDE & Editor Settings
+.vscode/
+.idea/
 .agents/
 .claude/
 .cursor/
-.vscode/
-
-# OS / Binary artifacts
 .DS_Store
-*.deb
-*.tar.gz
-*.zip
-test-shm
-test-wal
-test_campaign-shm
-test_campaign-wal
-test
-test_campaign

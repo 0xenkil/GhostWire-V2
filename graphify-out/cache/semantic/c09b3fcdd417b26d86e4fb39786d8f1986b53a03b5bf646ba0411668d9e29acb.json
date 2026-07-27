@@ -1,1 +1,0 @@
-{"nodes": [], "edges": [{"source": "ghostwire_v6", "target": "subdomains_novalink_lk", "relation": "references", "confidence": "EXTRACTED", "confidence_score": 1.0, "source_file": "summarized_log.txt", "source_location": null, "weight": 1.0}], "hyperedges": []}
