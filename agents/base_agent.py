@@ -18,7 +18,7 @@ from utils.sanitizer import clean_text
 from utils.validator import is_valid_target
 from utils.guardian import block_or_repair
 import requests
-from core.safe_executor import should_retry
+from core.safe_executor import should_retry, classify_unrepairable
 from core.ip_rotator import IpRotator
 from core.waf_ghost_engine import WafGhostEngine
 from intelligence.waf_evasion_engine import WafEvasionEngine
@@ -2912,6 +2912,44 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
                     f"Routing to AI triage + --help-grounded repair instead.")
                 result.status = ResultStatus.FAILURE
                 result.exit_code = result.exit_code or 1
+
+            # ── DETERMINISTIC UN-REPAIRABLE EXIT GUARD (no AI call) ──────────
+            # A structurally hopeless exit code (127 not-found, 126 not-exec,
+            # 6 DNS, 7 refused, 137/143 killed, -1 no-code) can NEVER be fixed by
+            # rewriting the command. Classify it HERE — before the AI triage and
+            # the repair loop — so the operator does not (a) burn an AI triage
+            # call on a foregone conclusion and (b) then guess new flags at a
+            # missing binary (the #1 hallucination-compounding path). Purely
+            # exit-code driven via core.safe_executor.classify_unrepairable — no
+            # per-tool or per-error-string logic, so new tools inherit it for
+            # free. should_retry() (later, line ~3111) shares the same exit set
+            # as a backstop; this just stops the wasted work up front.
+            if (not result.success
+                    and not getattr(result, "was_timeout", False)
+                    and result.status not in (
+                        ResultStatus.BLOCKED, ResultStatus.SCOPE_BLOCKED,
+                        ResultStatus.WAF_BLOCKED, ResultStatus.NOT_INSTALLED,
+                        ResultStatus.SKIPPED)):
+                _unrep = classify_unrepairable(result)
+                if _unrep == "not_installed":
+                    self.log.info(
+                        f"[EXIT-GUARD] '{tool}' exit {getattr(result, 'exit_code', '?')}: "
+                        f"binary missing / not executable — marking NOT_INSTALLED "
+                        f"(no repair, no AI call).")
+                    result.status = ResultStatus.NOT_INSTALLED
+                    self._command_history[cmd_hash] = {
+                        "ts": time.time(), "status": ResultStatus.NOT_INSTALLED.value}
+                    self._track_failure(result)
+                    return result
+                if _unrep == "abandon":
+                    self.log.info(
+                        f"[EXIT-GUARD] '{tool}' exit {getattr(result, 'exit_code', '?')}: "
+                        f"structurally un-repairable (DNS/refused/killed/no-code) — "
+                        f"abandoning (no repair, no AI call).")
+                    self._command_history[cmd_hash] = {
+                        "ts": time.time(), "status": ResultStatus.FAILURE.value}
+                    self._track_failure(result)
+                    return result
 
             # ── UNIVERSAL AI OUTCOME TRIAGE ──────────────────────────────────
             # For a NON-success result, reason about what actually happened

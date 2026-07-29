@@ -16,7 +16,7 @@ import types
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.safe_executor import should_retry  # noqa: E402
+from core.safe_executor import should_retry, classify_unrepairable  # noqa: E402
 
 
 def _r(code):
@@ -42,3 +42,35 @@ def test_success_and_generic_failure_retry():
     assert should_retry(_r(0)) is True       # success-ish exit retryable (not blocked)
     assert should_retry(_r(1)) is True       # generic tool error -> let repair try
     assert should_retry(None) is False       # nothing to act on
+
+
+# ── classify_unrepairable: deterministic pre-triage guard (2026-07-29) ───────
+# Missing/un-executable binaries (126/127) must route to NOT_INSTALLED — never
+# into the AI triage or repair loop, where the operator would guess flags at a
+# binary that isn't there. Other structural failures abandon; repairable exits
+# return None so the bounded repair loop still runs. Kept in lockstep with
+# should_retry so the two exit-code sets can never drift apart.
+def test_classify_missing_binary_is_not_installed():
+    for code in (126, 127):
+        assert classify_unrepairable(_r(code)) == "not_installed", code
+        assert classify_unrepairable({"exit_code": code}) == "not_installed", code
+
+
+def test_classify_structural_failure_abandons():
+    for code in (-1, 6, 7, 137, 143):
+        assert classify_unrepairable(_r(code)) == "abandon", code
+
+
+def test_classify_repairable_returns_none():
+    # These reach the bounded repair loop — must NOT be pre-classified.
+    for code in (0, 1, 2, 3, 28, 35, 52, 56):
+        assert classify_unrepairable(_r(code)) is None, code
+    assert classify_unrepairable(None) is None
+
+
+def test_classify_and_should_retry_never_drift():
+    # Every exit code classify_unrepairable flags MUST also be a no-retry exit,
+    # and vice-versa — the two share a single source of truth.
+    for code in range(-5, 260):
+        flagged = classify_unrepairable(_r(code)) is not None
+        assert flagged == (should_retry(_r(code)) is False), code
