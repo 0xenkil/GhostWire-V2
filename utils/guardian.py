@@ -75,6 +75,21 @@ def validate_ai_command(command: str, target: str,
         return False, "Empty command", ""
 
     command = command.strip()
+
+    # Extract command if wrapped in markdown code blocks or prose
+    code_block_match = re.search(r"```(?:bash|sh)?\s*\n?(.*?)\n?```", command, re.DOTALL | re.IGNORECASE)
+    if code_block_match:
+        command = code_block_match.group(1).strip()
+    else:
+        # If output contains newline with prose before a command line
+        lines = [line.strip() for line in command.splitlines() if line.strip()]
+        for line in lines:
+            # Pick first line that starts with a valid binary or environment variable
+            first_word = line.split()[0] if line.split() else ""
+            if first_word.lower() in _ALLOWED_RECON_TOOLS_LOWER or "=" in first_word or first_word in ["export", "sudo", "timeout"]:
+                command = line
+                break
+
     original_cmd = command
 
     # Autonomous target normalization (no hardcodes)

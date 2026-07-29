@@ -13,45 +13,12 @@ from core.target_graph import TargetGraph, resolve_scope_entry, quick_resolve_ip
 
 class ReconAgent(BaseAgent):
     def _preflight(self) -> tuple[bool, str]:
-        """Verify core tools are available. Only hard-block if ALL critical tools are missing."""
-        self.log.info("Performing pre-flight dependency checks...")
-        # Hard-required: nmap (port scan) + curl (HTTP probes). Everything else is optional.
-        # curl alone can do basic HTTP probing — only block if ALL tools are
-        # absent.
-        HARD_REQUIRED = ["nmap", "curl"]
-        # Optional: warn but don't block
-        try:
-            rules = self._load_rules("recon")
-            optional_tools = rules.get(
-                "core_tools", [
-                    "masscan", "dig", "subfinder"])
-            optional_tools = [
-                t for t in optional_tools if t not in HARD_REQUIRED]
-        except Exception as e:
-            import logging as __logging_tmp
-            __logging_tmp.getLogger(__name__).debug(f"Silenced exception: {e}")
-            optional_tools = ["masscan", "dig", "subfinder"]
-
-        missing_hard = [
-            t for t in HARD_REQUIRED if not self.tools.ensure_installed(t)]
-
-        # Only hard-block if ALL critical tools are missing.
-        # curl alone can perform basic HTTP reconnaissance even without nmap.
-        if len(missing_hard) == len(HARD_REQUIRED):
-            return False, f"Missing ALL critical recon tools (hard block): {', '.join(missing_hard)}"
-
-        if missing_hard:
-            self.log.warning(
-                f"Some critical recon tools unavailable (degraded mode): {
-                    ', '.join(missing_hard)}")
-
-        missing_opt = [
-            t for t in optional_tools if not self.tools.ensure_installed(t)]
-        if missing_opt:
-            self.log.warning(
-                f"Optional recon tools missing (degraded mode): {
-                    ', '.join(missing_opt)}")
-
+        """Verify tool availability dynamically without strict hardcoding."""
+        self.log.info("Performing autonomous pre-flight dependency checks...")
+        basic_candidates = ["curl", "wget", "nmap", "nc", "python3"]
+        available_tools = [t for t in basic_candidates if self.tools.ensure_installed(t)]
+        if not available_tools:
+            return False, "No usable network exploration tools found on host environment."
         return True, ""
 
     def _verify_subdomain(self, subdomain: str, wildcard_ips: set,

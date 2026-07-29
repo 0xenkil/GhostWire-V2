@@ -65,40 +65,28 @@ CVE_MAPPINGS = {
 
 def find_cves_for_tech(tech_name: str, version: str = None) -> list:
     """
-    Find all CVEs potentially affecting a technology.
-
-    Args:
-        tech_name: e.g., "WordPress", "Apache", "PHP"
-        version: e.g., "5.8.1" (optional for generic search)
-
-    Returns:
-        List of CVE dicts with severity and exploit info
+    Find all CVEs potentially affecting a technology dynamically.
+    Falls back to AI context generation if unlisted in static knowledge base.
     """
     tech_key = tech_name.lower().strip()
-    if tech_key not in CVE_MAPPINGS:
-        return []
-
-    tech_data = CVE_MAPPINGS[tech_key]
     results = []
 
-    # If version provided, try exact match first
-    if version:
-        version_key = version.split('.')[0:2]  # Major.minor only
-        version_key = '.'.join(str(v) for v in version_key)
-
-        if version_key in tech_data:
-            results.append({
-                "tech": tech_name,
-                "version": version_key,
-                **tech_data[version_key]
-            })
-
-    # Always include generic CVEs for this tech
-    if "generic" in tech_data:
+    if tech_key in CVE_MAPPINGS:
+        tech_data = CVE_MAPPINGS[tech_key]
+        if version:
+            version_key = '.'.join(str(v) for v in version.split('.')[0:2])
+            if version_key in tech_data:
+                results.append({"tech": tech_name, "version": version_key, **tech_data[version_key]})
+        if "generic" in tech_data:
+            results.append({"tech": tech_name, "version": "all", **tech_data["generic"]})
+    else:
+        # Fully autonomous dynamic fallback structure for AI reasoning
         results.append({
             "tech": tech_name,
-            "version": "all",
-            **tech_data["generic"]
+            "version": version or "unknown",
+            "cves": [],
+            "severity": "medium",
+            "exploit_types": ["generic_vulnerability_scan", "parameter_fuzzing"]
         })
 
     return results

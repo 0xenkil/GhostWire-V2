@@ -1808,39 +1808,8 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
             canonical = re.sub(r'\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/([a-zA-Z_]\S*)', r'\1', canonical)
             canonical = re.sub(r'\b([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/+$', r'\1', canonical)
 
-        # Ensure sqlmap always has --batch and uses --crawl instead of --crawl-depth
-        if tool_name == "sqlmap":
-            if "--batch" not in canonical:
-                canonical = f"{canonical} --batch"
-            canonical = re.sub(r'--crawl-depth[=\s]*(\d+)', r'--crawl=\1', canonical)
-
-        # Whatweb header fix
-        if tool_name == "whatweb":
-            canonical = re.sub(r'--header\s+("[^"]*"|\'[^\']*\'|\S+)', r'--custom-header=\1', canonical)
-
-        # Ensure ffuf always has FUZZ in the URL or command and a wordlist flag
-        if tool_name == "ffuf":
-            if "FUZZ" not in canonical:
-                urls = re.findall(r'https?://[^\s\'"]+', canonical)
-                if urls:
-                    url = urls[0]
-                    if url.endswith("/"):
-                        new_url = f"{url}FUZZ"
-                    else:
-                        new_url = f"{url}/FUZZ"
-                    canonical = canonical.replace(url, new_url)
-                else:
-                    if target:
-                        canonical = f"{canonical} -u {target}/FUZZ"
-            
-            if " -w" not in canonical and " --wordlist" not in canonical:
-                canonical = f"{canonical} -w {{WORDLIST}}"
-
-        # Strip output redirection flags for stdout parsability
-        if tool_name in {"subfinder", "gobuster", "nmap", "nikto", "dnsenum", "sslscan", "whatweb", "ffuf", "dirsearch"}:
-            canonical = re.sub(r'(?<!\S)-o[NGXA]?\s+\S+', '', canonical)
-            canonical = re.sub(r'(?<!\S)--output\s+\S+', '', canonical)
-            canonical = re.sub(r'\s*>\s*\S+', '', canonical)
+        # Note: Tool flag construction and syntax adjustments are delegated to AI reasoning and SyntaxLearner.
+        canonical = re.sub(r'\s{2,}', ' ', canonical).strip()
 
         # Hydra target URL formatting
         if tool_name == "hydra":
@@ -2141,6 +2110,8 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
         default = {"action": "repair", "reason": ""}
         try:
             out = ((result.stdout or "") + "\n" + (result.stderr or "")).strip()
+            # Clean raw output from ANSI codes, VT100 escapes, and excessive noise before prompting
+            out = clean_text(out)
             sig = tool + "|" + " ".join(out.lower().split())[:160]
             cache = getattr(self, "_outcome_interp_cache", None)
             if cache is None:
@@ -2149,6 +2120,8 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
                 return cache[sig]
             if not getattr(self, "ai", None):
                 return default
+            # Limit error snippet to high-signal 800 chars to avoid window saturation
+            error_snippet = out[:800] if len(out) > 800 else (out or "(no output)")
             prompt = (
                 "A security tool returned a NON-success result. Decide what to do. "
                 "This may be a tool, error, or defense you have never seen — reason "
@@ -2157,7 +2130,7 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
                 f"Tool: {tool}\nCommand: {command}\n"
                 f"Exit code / status: {getattr(result, 'exit_code', '?')} / "
                 f"{getattr(result, 'status', '?')}\n"
-                f"Output (stdout+stderr, truncated):\n{out[:1200] or '(no output)'}\n\n"
+                f"Output (stdout+stderr, cleaned):\n{error_snippet}\n\n"
                 "Pick ONE action:\n"
                 "- accept: the output ALREADY contains useful results worth keeping "
                 "(many tools exit non-zero by convention, or partially succeed).\n"
