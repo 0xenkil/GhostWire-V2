@@ -131,6 +131,14 @@ class IpRotator:
             log.error(f"[IP-ROTATE] Tor readiness check failed: {e}")
             return False
 
+        # Ensure proxychains routes DNS THROUGH Tor (socks5), not the system
+        # /etc/proxychains4.conf default which ships as socks4 — socks4 resolves
+        # target hostnames LOCALLY, which both leaks DNS and fails HTTPS to hosts
+        # whose locally-resolved IP refuses the Tor exit (the 'tlsv1 alert
+        # internal error' / 'connection refused' seen on real targets). Written
+        # before the exit-IP probe (itself proxied).
+        self._ensure_proxychains_config()
+
         # 2. Grab baseline exit IP
         self._current_exit_ip = self._get_exit_ip()
         if not self._current_exit_ip:
@@ -144,6 +152,34 @@ class IpRotator:
             f"[IP-ROTATE] Tor ready. Current exit IP: {self._current_exit_ip}")
         self._tor_verified = True
         return True
+
+    def _ensure_proxychains_config(self) -> None:
+        """Write a user-level ~/.proxychains/proxychains.conf using **socks5** +
+        remote DNS for Tor. proxychains4 prefers this over the system
+        /etc/proxychains4.conf (commonly socks4), so no root is needed and the
+        DNS leak / HTTPS failures of socks4 are avoided. Idempotent, best-effort;
+        a write failure just leaves the system config in place."""
+        import shlex
+        port = int(self._socks_port)
+        conf = (
+            "strict_chain\n"
+            "proxy_dns\n"
+            "remote_dns_subnet 224\n"
+            "tcp_read_time_out 15000\n"
+            "tcp_connect_time_out 8000\n"
+            "[ProxyList]\n"
+            f"socks5 127.0.0.1 {port}\n"
+        )
+        try:
+            self._ssh.execute(
+                "mkdir -p ~/.proxychains && printf '%s' "
+                + shlex.quote(conf) + " > ~/.proxychains/proxychains.conf",
+                timeout=10)
+            log.info(
+                "[IP-ROTATE] proxychains configured for socks5 + remote DNS "
+                "(DNS resolves through Tor).")
+        except Exception as e:
+            log.debug(f"[IP-ROTATE] proxychains config write skipped: {e}")
 
     def should_rotate(self) -> bool:
         """Returns True when it's time to request a new circuit."""
