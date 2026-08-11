@@ -820,7 +820,7 @@ SYSTEM_GIT = ToolCapability(
 
 
 # ── Registry of ALL known tools (source of truth for Guardian allowlist) ──
-ALL_TOOLS: list[ToolCapability] = [
+_RAW_ALL_TOOLS: list[ToolCapability] = [
     # Original 17
     DISCOVER_SUBDOMAINS,
     DISCOVER_SUBDOMAINS_ALT,
@@ -870,6 +870,38 @@ ALL_TOOLS: list[ToolCapability] = [
     SYSTEM_PIP3,
     SYSTEM_GIT,
 ]
+
+
+def _build_all_tools_view() -> "list[ToolCapability]":
+    """P2-4: ALL_TOOLS is a GENERATED view over the private authored seed
+    (_RAW_ALL_TOOLS) plus catalog tools not already covered (deduped by binary).
+    Authored capabilities are preserved verbatim; catalog-only tools appear as
+    minimal capability entries so the installer/registry see one source of truth.
+    Safe: a catalog failure degrades to the raw seed."""
+    view = list(_RAW_ALL_TOOLS)
+    have = {((t.binary or t.name) or "").lower() for t in view}
+    try:
+        from tools.tool_catalog import get_catalog
+        cat = get_catalog()
+        for e in cat.all():
+            b = (getattr(e, "binary", "") or getattr(e, "name", "") or "").lower()
+            if not b or b in have:
+                continue
+            cap = getattr(e, "primary_capability", "") or "utility"
+            view.append(ToolCapability(
+                name=getattr(e, "name", b) or b,
+                binary=getattr(e, "binary", b) or b,
+                capabilities=[cap],
+                install_cmds={"generic": cat.install_command(b) or ""},
+                description=getattr(e, "description", "") or ""))
+            have.add(b)
+    except Exception:
+        pass
+    return view
+
+
+# Public generated view (P2-4).
+ALL_TOOLS: list[ToolCapability] = _build_all_tools_view()
 
 # Build capability -> tools lookup
 _CAPABILITY_MAP: dict[str, list[ToolCapability]] = {}

@@ -5803,16 +5803,26 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
                 lines.append(
                     "  (WSL not connected - cannot verify tool availability)")
 
-            # ── 6. Tool Effectiveness (from tracker) ──────────────────────
+            # ── 6. Tool Effectiveness → SELECTION GUIDANCE (§9.7a) ─────────
+            # Not just a display: turn the tracker's per-target-type ranking into
+            # an OBEYED prefer/avoid directive so the engine's learning actually
+            # steers tool SELECTION. Gated on real data (get_tool_effectiveness
+            # only firms up a recommendation at >=3 runs) and no-ops gracefully
+            # when the target type is unknown.
             if hasattr(self, "tool_tracker"):
                 try:
                     summary = self.tool_tracker.summarize_effectiveness()
                     if summary:
                         lines.append(
-                            "\n=== TOOL EFFECTIVENESS (this session) ===")
+                            "\n=== TOOL EFFECTIVENESS (learned) ===")
+                        try:
+                            _ttype = self._metric_target_type()
+                        except Exception:
+                            _ttype = ""
+                        prefer, avoid = [], []
                         # summary is {tool: {target_type: {success_count,
                         # total_runs, ...}}} — aggregate to one rate per tool.
-                        for tool, per_target in list(summary.items())[:8]:
+                        for tool, per_target in list(summary.items())[:12]:
                             if not isinstance(per_target, dict):
                                 continue
                             succ = sum(s.get("success_count", 0)
@@ -5825,7 +5835,23 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
                                 continue
                             score = succ / runs
                             bar = "[+]" if score >= 0.5 else "[x]"
-                            lines.append(f"  {bar} {tool:<16}: {score:.0%}")
+                            lines.append(f"  {bar} {tool:<16}: {score:.0%} ({runs} runs)")
+                            rec = ""
+                            if _ttype:
+                                rec = self.tool_tracker.get_tool_effectiveness(
+                                    tool, _ttype).get("recommendation", "")
+                            if rec == "highly_effective":
+                                prefer.append(tool)
+                            elif rec in ("ineffective_skip", "rarely_effective"):
+                                avoid.append(tool)
+                        if prefer:
+                            lines.append(
+                                f"  PREFER (proven effective on this target): "
+                                f"{', '.join(prefer[:6])}")
+                        if avoid:
+                            lines.append(
+                                f"  AVOID (proven to fail here — choose an "
+                                f"alternative): {', '.join(avoid[:6])}")
                 except Exception as _eff_err:
                     self.log.debug(
                         f"Tool effectiveness summary unavailable: {_eff_err}")

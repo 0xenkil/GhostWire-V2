@@ -91,7 +91,7 @@ TOOL_FALLBACKS = {
     "amass": ["subfinder", "curl"],
 }
 
-TOOL_REGISTRY = {
+_RAW_TOOL_REGISTRY = {   # authored seed; public TOOL_REGISTRY (below) is a generated view (P2-4)
     "nuclei": {
         "binary": "nuclei",
         "timeout": TOOL_NUCLEI_TIMEOUT,
@@ -373,6 +373,39 @@ TOOL_REGISTRY = {
         "description": "Subdomain enumeration via active/passive discovery",
     },
 }
+
+
+def _build_registry_view() -> dict:
+    """P2-4: TOOL_REGISTRY is a GENERATED view over the private authored seed
+    (_RAW_TOOL_REGISTRY) merged with the ToolCatalog. Authored tools keep their
+    exact entry (zero behaviour change for existing consumers); catalog-only
+    tools (the modern Go arsenal seeded in the catalog) appear here automatically
+    — one source of truth, deduped by name. Safe: a catalog failure degrades to
+    the raw seed rather than raising."""
+    view = dict(_RAW_TOOL_REGISTRY)
+    try:
+        from tools.tool_catalog import get_catalog
+        cat = get_catalog()
+        for e in cat.all():
+            key = (getattr(e, "name", "") or "").lower()
+            if not key or key in view:
+                continue
+            view[key] = {
+                "binary": getattr(e, "binary", key) or key,
+                "install": cat.install_command(key) or "",
+                "category": (getattr(e, "primary_capability", "")
+                             or getattr(e, "category", "utility")),
+                "timeout": 120,
+                "description": "",
+            }
+    except Exception as _e:
+        log.debug(f"[P2-4] catalog view merge skipped: {_e}")
+    return view
+
+
+# Public generated view (a plain dict so register_tool can mutate it in place and
+# all existing `from tools.tool_registry import TOOL_REGISTRY` consumers keep working).
+TOOL_REGISTRY = _build_registry_view()
 
 
 def register_tool(name: str, config: dict) -> None:
