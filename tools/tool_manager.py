@@ -129,9 +129,15 @@ def _wsl_which(tool_name: str) -> bool:
         if platform.system() != "Windows":
             return shutil.which(tool_name) is not None
         import subprocess
+        import shlex as _shlex
+        # Use the SAME tool PATH the executor runs with (incl. $HOME/go/bin), so a
+        # go-installed tool that lives in ~/go/bin — not on WSL's default PATH — is
+        # correctly detected instead of being re-installed forever.
+        from config_paths import WSL_TOOL_PATH
         result = subprocess.run(
-            ["wsl", "-e", "which", tool_name],
-            capture_output=True, text=True, timeout=6
+            ["wsl", "-e", "bash", "-c",
+             f"export PATH={WSL_TOOL_PATH}:$PATH && command -v {_shlex.quote(tool_name)}"],
+            capture_output=True, text=True, timeout=8
         )
         return result.returncode == 0 and bool(result.stdout.strip())
     except Exception:
@@ -147,6 +153,19 @@ def _local_root_bash_argv(cmd: str) -> list:
     if platform.system() == "Windows":
         return ["wsl", "-u", "root", "-e", "bash", "-c", cmd]
     return ["sudo", "bash", "-c", cmd]
+
+
+def _local_user_bash_argv(cmd: str) -> list:
+    """Argv to run `cmd` as the CURRENT / default (non-root) user in bash on the
+    LOCAL host. On Windows the local Linux is WSL (`wsl -e bash -c`, default
+    distro user); on native Linux it's `bash -c` (current user). Used for
+    `go install` so binaries land in the USER's ~/go/bin (on PATH), not root's.
+    Fixes the Windows `[WinError 2]` where a raw `["bash","-c",...]` had no
+    bash.exe on the Windows host — go-install must run INSIDE WSL there."""
+    import platform
+    if platform.system() == "Windows":
+        return ["wsl", "-e", "bash", "-c", cmd]
+    return ["bash", "-c", cmd]
 
 
 # Tools that benefit from real-time streaming (long-running)
@@ -540,7 +559,11 @@ class ToolManager:
                         # which the non-root user can't reach. Run go-installs via a
                         # plain user bash (the embedded `sudo ln` elevates only for the
                         # /usr/local/bin symlink); apt/pip still run as root.
-                        _install_argv = (["bash", "-c", current_install_cmd]
+                        # go-install runs as the USER (binary -> ~/go/bin). On
+                        # Windows that MUST go through WSL, not a raw Windows
+                        # `bash` (which raises WinError 2). _local_user_bash_argv
+                        # handles both hosts.
+                        _install_argv = (_local_user_bash_argv(current_install_cmd)
                                          if _is_go_install
                                          else _local_root_bash_argv(current_install_cmd))
                         result = subprocess.run(

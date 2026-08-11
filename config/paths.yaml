@@ -97,12 +97,12 @@ wordlists:
       - "~/redteam-workspace/ai_wordlist.txt"
 
 vps_settings:
-  tool_path: "$HOME/.local/bin:/root/.local/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/root/theHarvester"
+  tool_path: "$HOME/go/bin:/usr/local/go/bin:$HOME/.local/bin:/root/.local/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/root/theHarvester"
   temp_dir: "~/redteam-workspace"
   results_dir: "~/redteam-workspace/results"
 
 wsl_settings:
-  tool_path: "$HOME/.local/bin:/root/.local/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/root/theHarvester"
+  tool_path: "$HOME/go/bin:/usr/local/go/bin:$HOME/.local/bin:/root/.local/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/root/theHarvester"
   temp_dir: "~/redteam-workspace"
   results_dir: "~/redteam-workspace/results"
 
