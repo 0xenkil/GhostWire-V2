@@ -1,3 +1,4 @@
+import os
 import time
 import threading
 import requests
@@ -20,6 +21,29 @@ from config_thresholds import AI_RETRY_DELAY
 from utils.logger import get_logger
 
 log = get_logger("ai_backend")
+
+
+# P4-1 (AIBACKEND-SLEEP-1 / ORCH-TIMEOUT-1 / DEEP-9): never block for the FULL
+# provider recovery window — a 429/quota window can be minutes to an hour, and
+# sleeping it inline pins the caller (and, on the event-loop thread, blinds
+# asyncio.timeout) past the phase deadline. Cap the inline recovery wait; a
+# longer window is surfaced as BackendExhausted so the agent waits (or doesn't)
+# within its OWN phase budget instead of query() blocking blindly.
+RECOVERY_SLEEP_CAP = int(os.getenv("AI_RECOVERY_SLEEP_CAP", "120"))
+
+
+class BackendExhausted(RuntimeError):
+    """All AI backends are temporarily exhausted.
+
+    ``recovery_seconds`` is the shortest observed provider recovery window (or
+    None if unknown). Subclasses ``RuntimeError`` so every existing
+    ``except RuntimeError`` / broad ``except Exception`` catch keeps working
+    unchanged — callers that want the window can read ``.recovery_seconds``.
+    """
+
+    def __init__(self, message, recovery_seconds=None):
+        super().__init__(message)
+        self.recovery_seconds = recovery_seconds
 
 
 class GroqKeyPool:
@@ -229,6 +253,9 @@ class GroqKeyPool:
 
 
 class AIBackend:
+    # P5-7 (D-FUT-3): satisfies the core.llm_backend.LLMBackend Protocol's `name`.
+    name = "ai_backend"
+
     def __init__(self, preferred_backend: str = None):
         # Validate Groq configuration before initializing
         if GROQ_API_KEY_POOL:
@@ -348,6 +375,33 @@ class AIBackend:
                 f"({stats['phase_approx_tokens']:,} / {max_tokens:,} approx tokens). "
                 "Triggering circuit breaker.")
         return exceeded
+
+    def token_budget(self, phase: str = "") -> int:
+        """P5-7: this backend's phase TOKEN budget (0 = unlimited), resolved via
+        the ONE shared resolver so it can never drift from the Phase-4 authority
+        (base_agent._phase_token_budget / _afford_llm). Uses the current phase
+        (set by set_current_phase) when none is given."""
+        from core.llm_backend import phase_token_budget
+        return phase_token_budget(phase or getattr(self, "_current_phase", ""))
+
+    def _bounded_recovery_sleep(self, recovery_time) -> int:
+        """P4-1: sleep for the recovery window but NEVER longer than
+        RECOVERY_SLEEP_CAP, in 1-second slices so an abort/shutdown can break out
+        promptly (belt against ORCH-TIMEOUT-1). If ``self._shutdown_event`` (an
+        optional threading.Event the agent may set on abort) is set, stop early.
+        Returns the seconds actually slept."""
+        try:
+            cap = min(max(0, int(recovery_time)), RECOVERY_SLEEP_CAP)
+        except (TypeError, ValueError):
+            return 0
+        ev = getattr(self, "_shutdown_event", None)
+        slept = 0
+        while slept < cap:
+            if ev is not None and ev.is_set():
+                break
+            time.sleep(1)
+            slept += 1
+        return slept
 
     def _compact_prompt_text(self, text: str, max_chars: int,
                              label: str = "prompt", markers: list = None) -> str:
@@ -867,19 +921,35 @@ class AIBackend:
 
         # All backends exhausted
         recovery_time = self.get_shortest_recovery_time()
+        error_msg = f"{last_error}" if last_error else "unknown error"
         if recovery_time and _depth < 3:
+            # P4-1: a recovery window LONGER than the inline cap must NOT be slept
+            # here — blocking the caller for minutes/hours blows the phase deadline
+            # (ORCH-TIMEOUT-1). Surface it as BackendExhausted so the agent decides
+            # whether to wait, within its own budget. Short windows we absorb
+            # inline (bounded + interruptible), then retry.
+            if int(recovery_time) > RECOVERY_SLEEP_CAP:
+                log.warning(
+                    f"[!] All AI backends exhausted; recovery window "
+                    f"{int(recovery_time)}s exceeds the {RECOVERY_SLEEP_CAP}s inline "
+                    f"cap — raising BackendExhausted (caller waits within budget).")
+                raise BackendExhausted(
+                    f"All AI backends exhausted. Last error: {error_msg}",
+                    recovery_seconds=int(recovery_time))
             log.warning(
-                f"[!] All AI backends exhausted. Sleeping {recovery_time}s for recovery window...")
-            time.sleep(recovery_time)
-            # Retry query after sleep
+                f"[!] All AI backends exhausted. Sleeping up to {RECOVERY_SLEEP_CAP}s "
+                f"(window={int(recovery_time)}s) for recovery...")
+            self._bounded_recovery_sleep(recovery_time)
+            # Retry query after the bounded sleep
             return self.query(system_prompt, user_message,
                               max_retries, model_id, _depth=_depth + 1)
 
-        # FIX #3.4: Raise exception instead of returning error string
-        error_msg = f"{last_error}" if last_error else "unknown error"
+        # FIX #3.4: Raise exception instead of returning error string. P4-1:
+        # BackendExhausted subclasses RuntimeError, so existing catches still hold.
         error_text = f"All AI backends exhausted. Last error: {error_msg}"
         log.error(f"[X] {error_text}")
-        raise RuntimeError(error_text)
+        raise BackendExhausted(
+            error_text, recovery_seconds=int(recovery_time) if recovery_time else None)
 
     def _query_groq_with_rotation(
             self, system: str, user: str, max_retries: int, model_id: str = None) -> str | None:

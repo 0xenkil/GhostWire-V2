@@ -20,11 +20,26 @@ class TestTailoring:
 class TestProgress:
     def test_confirmed_idor_achieves_objective(self):
         L = ObjectiveLedger()
+        # P0-7: objectives advance only on PROVEN findings — supply a resolver
+        # that attests proof (in production this is ProofLedger finding_is_proven).
         newly = L.update_from_findings([
             {"type": "confirmed_vulnerability", "severity": "high",
-             "detail": "VULN_PROVEN [IDOR] /api/orders/124 differential"}])
+             "detail": "VULN_PROVEN [IDOR] /api/orders/124 differential"}],
+            proof_resolver=lambda f: True)
         assert "object_authz_bug" in newly
         assert L.objectives["object_authz_bug"].status == "achieved"
+
+    def test_unproven_finding_does_not_advance(self):
+        # P0-7 (OBJLEDGER-FALSE-WIN closed): a confirmed_vulnerability TYPE +
+        # critical severity + "VULN_PROVEN" substring with NO resolvable proof
+        # must NOT advance an objective.
+        L = ObjectiveLedger()
+        newly = L.update_from_findings([
+            {"type": "confirmed_vulnerability", "severity": "critical",
+             "detail": "VULN_PROVEN [IDOR] object-level authorization broken"}],
+            proof_resolver=lambda f: False)
+        assert newly == []
+        assert L.objectives["object_authz_bug"].status != "achieved"
 
     def test_idle_streak_increments_without_progress(self):
         L = ObjectiveLedger()
@@ -38,7 +53,8 @@ class TestProgress:
         assert L.idle_streak == 1
         L.update_from_findings([
             {"type": "confirmed_vulnerability", "severity": "critical",
-             "detail": "dumped rows password data extraction"}])
+             "detail": "dumped rows password data extraction"}],
+            proof_resolver=lambda f: True)
         assert L.idle_streak == 0
 
 
@@ -53,7 +69,7 @@ class TestStopConditions:
              "detail": "VULN_PROVEN [BOLA] object-level authorization broken"},
             {"type": "confirmed_vulnerability", "severity": "critical",
              "detail": "extracted password credential secret data extraction"},
-        ])
+        ], proof_resolver=lambda f: True)
         stop, why = L.should_stop()
         assert stop
         assert "primary objectives resolved" in why.lower()

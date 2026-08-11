@@ -10,11 +10,19 @@ Bypasses WAF by not making direct requests to WAF-protected endpoints:
 - No direct WAF contact
 """
 
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 
 
 class OOBExfilEngine:
-    """Out-of-band exfiltration to bypass WAF"""
+    """Out-of-band exfiltration to bypass WAF.
+
+    P5-5 (OOB-STUB): the vectors this engine emits are LEADS — candidate payloads.
+    An OOB exfil is CONFIRMED only by a real out-of-band CALLBACK carrying the
+    planted canary (the oob_callback proof through is_proven), never by the old
+    hardcoded ``waf_bypassed: True`` or a stub monitor. Conforms to WafTechnique.
+    """
+
+    name = "oob_exfil"
 
     def __init__(self, collaborator_domain: str = None):
         """
@@ -25,6 +33,24 @@ class OOBExfilEngine:
         """
         self.collaborator_domain = collaborator_domain or "collaborator.oob"
         self.oob_channels = []
+
+    def run(self, target: str, ctx=None) -> "Optional[object]":
+        """WafTechnique entry point: an OOB exfil is CONFIRMED only by a real
+        out-of-band callback carrying the planted canary. ctx supplies the
+        observed ``oob_events`` and the ``canary``; with a matching callback this
+        returns a proven oob Evidence, otherwise None (the discover_oob_vectors
+        payloads remain leads, never confirmations)."""
+        ctx = ctx or {}
+        events = ctx.get("oob_events") or []
+        canary = (ctx.get("canary") or "").strip()
+        if not events or not canary:
+            return None
+        from core.proof import ProofRegistry, ProofContext
+        ev = ProofRegistry.build("oob_callback", ProofContext(
+            oob_events=list(events), canary=canary,
+            command=f"OOB exfil against {target}",
+            notes="OOB callback carrying the planted canary"))
+        return ev if (ev is not None and ev.is_proven()) else None
 
     def discover_oob_vectors(self, target: str) -> Dict[str, Any]:
         """
@@ -84,7 +110,12 @@ class OOBExfilEngine:
             "name": "DNS Exfiltration",
             "method": "dns",
             "description": "Exfiltrate data via DNS queries to collaborator",
-            "waf_bypassed": True,
+            # P5-5 (OOB-STUB): was a hardcoded `waf_bypassed: True` — a bespoke
+            # false-confidence assert. A bypass is unproven until a real callback
+            # carrying the canary lands (see run()/monitor_oob_channel). This is a
+            # LEAD payload, not a confirmation.
+            "waf_bypassed": None,
+            "confirmed": False,
             "direct_waf_contact": False,
 
             # Payloads for various injection points
@@ -349,11 +380,17 @@ class OOBExfilEngine:
 
         return payload
 
-    def monitor_oob_channel(self, channel_type: str = "dns") -> Dict[str, Any]:
+    def monitor_oob_channel(self, channel_type: str = "dns",
+                            observed_events: list = None,
+                            canary: str = "") -> Dict[str, Any]:
         """
-        Monitor OOB channel for incoming data
+        Monitor OOB channel for incoming data and decide if exfil succeeded.
 
-        Check if exfiltration was successful
+        P5-5 (OOB-STUB): ``exfil_successful`` is now driven by MEASUREMENT — it is
+        True only when one of the ``observed_events`` (real collaborator callbacks)
+        carries the planted ``canary`` (the oob_callback proof through is_proven).
+        With no events/canary it stays False, exactly as before, so existing
+        zero-arg callers are unaffected.
         """
         result = {
             "channel": channel_type,
@@ -373,5 +410,15 @@ class OOBExfilEngine:
         elif channel_type == "http":
             result["method"] = "HTTP callback monitoring"
             result["callback_url"] = f"http://{self.collaborator_domain}"
+
+        canary = (canary or "").strip()
+        if observed_events and canary:
+            from core.proof import ProofRegistry, ProofContext
+            from intelligence.waf_bypass.technique import confirmed_bypass
+            ev = ProofRegistry.build("oob_callback", ProofContext(
+                oob_events=list(observed_events), canary=canary))
+            result["exfil_successful"] = confirmed_bypass(ev)
+            result["data_received"] = [
+                str(e) for e in observed_events if canary in str(e)]
 
         return result

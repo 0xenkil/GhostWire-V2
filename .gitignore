@@ -71,3 +71,8 @@ intelligence/.upgrades_backup/
 .claude/
 .cursor/
 .DS_Store
+
+# Stray runtime/test artifacts (do not publish)
+/test
+/test_campaign
+intelligence/strategic_knowledge.json

@@ -484,12 +484,11 @@ class WeaponizationAgent(BaseAgent):
                 else:
                     vuln_proven = True
                     proven_data = proof_text
-        elif "root:x:0" in proof_stdout:
-            vuln_proven = True
-            proven_data = "LFI confirmed: /etc/passwd leaked"
-        elif "SQL syntax" in proof_stdout:
-            vuln_proven = True
-            proven_data = "SQLi confirmed: SQL error in response"
+        # P0-6 (WEAPON-SUBSTR-PROOF): the `root:x:0` / `SQL syntax` substring
+        # elifs that minted vuln_proven=True from a bare marker are DELETED — a
+        # substring in output is not measured proof. A PoC must self-report the
+        # structured VULN_PROVEN: marker (above, gated by AI FP detection); the
+        # actual proof token below comes from a MEASURED artifact differential.
 
         if vuln_proven:
             success(f"[PROVEN] Exploit successful for {vuln_type}!")
@@ -512,8 +511,22 @@ class WeaponizationAgent(BaseAgent):
             elif any(k in _vtype_lower for k in ["missing_header"]):
                 _sev = "info"
 
+            # P0-6: stamp a MEASURED artifact proof — the leaked content must be
+            # PRESENT in the PoC output and ABSENT from the recon baseline. The
+            # VULN_PROVEN: marker + AI FP check only decide whether to ATTEMPT the
+            # proof; the ledger token is what makes it count as proven downstream.
+            # No baseline captured -> stamp returns '' -> the finding is a lead.
+            from core.proof import ProofContext
+            _baseline_body = str(self.store.get("waf_baseline_body") or "")
+            _pctx = ProofContext(
+                control_response=_baseline_body,
+                test_response=proof_stdout,
+                canary=str(proven_data)[:200],
+                command=script_name,
+                notes=str(proven_data)[:400])
             self.add_finding(f"proven_{vuln_type}", target,
-                             f"VULN_PROVEN: PoC script: {script_name}\nProof: {proven_data[:400]}", _sev)
+                             f"VULN_PROVEN: PoC script: {script_name}\nProof: {proven_data[:400]}", _sev,
+                             proof_method="artifact_reflection", proof_ctx=_pctx)
             results["proven_exploits"].append({
                 "type": vuln_type,
                 "proof": proven_data[:200],
@@ -529,25 +542,21 @@ class WeaponizationAgent(BaseAgent):
                 1).strip() if not_proven_match else "No output"
             warning(f"PoC not conclusive for {vuln_type}: {reason[:100]}")
 
-            # Nuclei-confirmed findings ARE confirmed even without an active PoC.
-            # Template match = confirmed vulnerability. Store as high-confidence finding
-            # so it appears in the report even if automated exploitation
-            # failed.
+            # P0-6 (WEAPON-NUCLEI-CONFIRM): a nuclei TEMPLATE MATCH whose active
+            # PoC did NOT prove is a LEAD, not a confirmed vulnerability — a
+            # template hit is a signal to validate, never measured proof. It is
+            # retagged nuclei_lead/info (and NOT added to proven_exploits) so it
+            # is chased/validated, never counted as proven in the report.
             if vuln_type.lower() in ("vulnerability",) and finding.get(
                     "severity", "").lower() in ("critical", "high", "medium"):
                 nuclei_detail = finding.get("detail", vuln_type)
-                results["proven_exploits"].append({
-                    "type": vuln_type,
-                    "proof": f"[Nuclei Template Confirmed] {nuclei_detail[:300]}",
-                    "source": "nuclei_template"
-                })
                 self.add_finding(
-                    "nuclei_confirmed", target,
-                    f"[Nuclei Template Match] {nuclei_detail}",
-                    finding.get("severity", "medium")
-                )
-                success(
-                    f"[NUCLEI CONFIRMED] {nuclei_detail[:80]} stored as confirmed finding.")
+                    "nuclei_lead", target,
+                    f"[Nuclei Template Match — UNVERIFIED LEAD, active PoC did not prove] "
+                    f"{nuclei_detail}",
+                    "info")
+                self.log.info(
+                    f"[NUCLEI LEAD] {nuclei_detail[:80]} recorded as an unverified lead.")
 
     def _generate_standard_payloads(self, results: dict):
         # EICAR test file (industry-standard non-malicious AV test)

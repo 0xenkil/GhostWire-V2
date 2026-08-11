@@ -188,6 +188,29 @@ class ReconAgent(BaseAgent):
                     f"output discarded as a proxy/tarpit artifact. Verified live web ports: {pruned_ports}.",
                     "info")
 
+            # PARSER-2: record the AUTHORITATIVE structured ports/services
+            # (post honeypot-pruning) so the recon bundle can read them directly
+            # instead of regex-scraping its own human-readable finding strings —
+            # a lossy round-trip (int → "Port N …" detail → int) that silently
+            # drops a port if the detail format drifts or the finding is deduped.
+            # The display findings below are unchanged (they still feed the report).
+            if not hasattr(self, "_structured_ports"):
+                self._structured_ports = set()
+                self._structured_masscan_ports = set()
+                self._structured_services = {}
+            _auth_ports = list(services.keys()) if services else parsed.get("open_ports", [])
+            for _p in _auth_ports:
+                try:
+                    _pi = int(_p)
+                except (ValueError, TypeError):
+                    continue
+                self._structured_ports.add(_pi)
+                if tool == "masscan":
+                    self._structured_masscan_ports.add(_pi)
+            if services:
+                for _pk, _svc in services.items():
+                    self._structured_services[str(_pk)] = _svc
+
             if services:
                 for port, svc in list(services.items())[:30]:
                     proto = svc.get("protocol", "tcp")
@@ -647,6 +670,26 @@ class ReconAgent(BaseAgent):
             "param_endpoints": sorted(param_endpoints)[:40],
         }
 
+    @staticmethod
+    def _derive_waf_type(fp: dict) -> str:
+        """P4-7 (WAFFP-TYPE-MISNOMER): a STABLE per-WAF identity for learner keying.
+        Prefer the matched known-WAF name from `similar_to_known` (e.g.
+        "cloudflare (match: 80%)" -> "cloudflare"); else a stable `unknown_<hash>`
+        of the detected-pattern set; else "unknown". Never a raw pattern name."""
+        sim = fp.get("similar_to_known") or []
+        if sim:
+            name = str(sim[0]).split("(")[0].strip().lower().replace(" ", "_")
+            if name:
+                return name
+        pats = fp.get("detected_patterns") or []
+        if pats:
+            import hashlib
+            h = hashlib.md5(
+                "|".join(sorted(str(p) for p in pats)).encode("utf-8", "ignore")
+            ).hexdigest()[:8]
+            return f"unknown_{h}"
+        return "unknown"
+
     def _run_recon_for_target(self, raw_target: str) -> dict:
         """
         Execute the full recon pipeline for a single target.
@@ -737,17 +780,32 @@ class ReconAgent(BaseAgent):
                     waf_signals.append("planning_recommendation")
                     if not fingerprint or fingerprint.get(
                             "confidence", 0) <= 0.3:
+                        # P4-7 (WAFFP-PLANNING-OVERRIDE): a PLANNING guess must NOT
+                        # manufacture WAF presence. The old code overwrote confidence
+                        # with a hardcoded 0.8 — exactly bypassing the strong-signal
+                        # gate the behavioral probe enforces. A planner recommendation
+                        # is a HYPOTHESIS: cap it at 0.2 (below the 0.5 assertion
+                        # threshold) so it never by itself asserts a WAF; the reactive
+                        # P4-4 path still fires evasion only on a MEASURED target block.
+                        _prior = fingerprint if isinstance(fingerprint, dict) else {}
                         fingerprint = {
                             "timestamp": time.time(),
                             "target": target_url,
                             "behaviors": plan_analysis.get("layer_analysis", {}),
                             "detected_patterns": [plan_analysis.get("recommended_bypass")],
-                            "confidence": 0.8,
-                            "similar_to_known": []
+                            "confidence": min(float(_prior.get("confidence", 0.0)), 0.2),
+                            "similar_to_known": _prior.get("similar_to_known", []),
+                            "planning_hypothesis": True,  # labelled guess, not a measured fact
                         }
         except Exception as plan_err:
             self.log.warning(
                 f"Error adopting planning WAF analysis: {plan_err}")
+        # P4-7 (WAFFP-TYPE-MISNOMER): the fingerprinter never sets `waf_type`, so it
+        # defaulted to a pattern name and fragmented the learner's per-WAF key.
+        # Derive a STABLE identity: the matched known-WAF name from similar_to_known
+        # (e.g. "cloudflare (match: 80%)" -> "cloudflare"), else unknown_<hash>.
+        if isinstance(fingerprint, dict) and not fingerprint.get("waf_type"):
+            fingerprint["waf_type"] = self._derive_waf_type(fingerprint)
         if isinstance(fingerprint, dict):
             for key in (
                 "blocking_status_codes",
@@ -1433,6 +1491,16 @@ Return a single paragraph summarizing the tech stack, entry points, and exploita
                         "domain": sub_domain,
                         "severity": f.get("severity", "info"),
                     })
+
+        # PARSER-2: the structured ports captured at parse time are authoritative
+        # and override the lossy regex re-derivation above. Fall back to the
+        # regex-derived list only if the structured accumulator is empty (e.g.
+        # ports arrived via a path that did not go through _process/emit).
+        _sp = getattr(self, "_structured_ports", set())
+        if _sp:
+            open_ports = list(_sp)
+            masscan_ports = list(getattr(self, "_structured_masscan_ports", set()))
+            services = {**services, **getattr(self, "_structured_services", {})}
 
         # Sort subdomains: high first, then medium, then info
         _sev_order = {

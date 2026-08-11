@@ -685,13 +685,21 @@ class Orchestrator:
 
                     async def run_agent_async():
                         try:
-                            # Support both sync and async agent.run() methods
+                            # Support both sync and async agent.run().
+                            # P4-1 (ORCH-TIMEOUT-1): a SYNC agent.run() must run in
+                            # a WORKER THREAD (asyncio.to_thread), never directly in
+                            # the event loop. The old code called agent.run() inline
+                            # here, so a blocking sleep inside it (e.g. the AI-backend
+                            # recovery wait) pinned the loop and BLINDED the phase
+                            # asyncio.timeout below — the deadline could never fire
+                            # until the sync call returned. Off-loading to a thread
+                            # keeps the loop free to enforce the timeout (the thread
+                            # finishes its now-bounded work in the background).
                             import inspect
-                            result_or_coro = agent.run()
-                            if inspect.isawaitable(result_or_coro):
-                                res = await result_or_coro
+                            if inspect.iscoroutinefunction(agent.run):
+                                res = await agent.run()
                             else:
-                                res = result_or_coro
+                                res = await asyncio.to_thread(agent.run)
                             _agent_debug_log(
                                 "core/orchestrator.py:run_agent_complete",
                                 "Agent task completed",

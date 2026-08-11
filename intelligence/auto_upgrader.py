@@ -47,10 +47,15 @@ class AutoUpgrader:
 
     def run_incremental_upgrade(
             self, engagement_id: str, after_phase: str = None) -> Dict[str, Any]:
-        """Wrapper for incremental upgrades mid-engagement"""
+        """Wrapper for incremental upgrades mid-engagement.
+
+        P3-5: runs as DRY-RUN. Application is additionally gated by the TruthGate
+        inside _validate_changes (fail-closed), so this belt-and-suspenders flip
+        just makes the intent explicit — mid-engagement is exactly when the
+        proven slice is smallest and a self-modification is least justified."""
         print(
-            f"[AUTO-UPGRADE] Triggering incremental upgrade after phase: {after_phase}")
-        return self.run_system_upgrade(engagement_id, dry_run=False)
+            f"[AUTO-UPGRADE] Triggering incremental upgrade (dry-run) after phase: {after_phase}")
+        return self.run_system_upgrade(engagement_id, dry_run=True)
 
     def register_new_tool(self, name: str, config: dict) -> Dict[str, Any]:
         """
@@ -147,7 +152,8 @@ class AutoUpgrader:
 
             # Phase 4: Validate Changes
             print("[AUTO-UPGRADE] Phase 4: Validating changes...")
-            validation = self._validate_changes(optimizations, rules_package)
+            validation = self._validate_changes(
+                optimizations, rules_package, engagement_id)
             upgrade_result["validation_errors"] = validation.get("errors", [])
             upgrade_result["phases"]["validation"] = {
                 "status": "complete",
@@ -184,17 +190,54 @@ class AutoUpgrader:
 
         return upgrade_result
 
+    def _proven_outcomes(self, engagement_id: str):
+        """P3-5: reconstruct PROOF-BACKED learning outcomes for an engagement from
+        the durable ProofLedger (store.get_evidence_objects), so TruthGate judges
+        a self-upgrade on real re-measured proof — never a schema/`status` check.
+
+        NOTE: this is per-engagement. A single engagement's proven slice is
+        under-powered, so TruthGate will (correctly) fail-closed and the apply
+        path stays inert-but-non-corrupting until a CROSS-engagement proven-outcome
+        ledger is fed in here — an explicit, reversible choice (§P3-5 v1.1), not a
+        permanent capability loss. Wire that ledger to this one method to re-enable
+        safe application."""
+        outcomes = []
+        try:
+            from intelligence.learning_signal import LearningOutcome
+            from core.result_contracts import Evidence
+            evs = self.store.get_evidence_objects(engagement_id) if self.store else []
+            for obj in evs or []:
+                try:
+                    ev = Evidence.from_dict(obj.get("evidence") or {})
+                except Exception:
+                    continue
+                outcomes.append(LearningOutcome.from_confirmed_hypothesis(
+                    tool=str(obj.get("vuln_class") or "unknown"), proof=ev))
+        except Exception as _e:
+            import logging
+            logging.getLogger(__name__).debug(
+                f"[P3-5] proven-outcome reconstruction skipped: {_e}")
+        return outcomes
+
     def _validate_changes(
-            self, optimizations: Dict[str, Any], rules_package: Dict[str, Any]) -> Dict[str, Any]:
+            self, optimizations: Dict[str, Any], rules_package: Dict[str, Any],
+            engagement_id: str = None) -> Dict[str, Any]:
         """
-        Validate that changes are safe to apply
+        Validate that changes are safe to apply.
+
+        P3-5: the final gate is a TruthGate — a persistent self-upgrade is only
+        admitted when backed by proof-backed outcomes whose held-out proven-rate
+        does not regress. If it cannot be evaluated (the common case today, absent
+        a cross-engagement proven ledger) it FAILS CLOSED: valid_changes is zeroed
+        so the apply path is skipped. Analysis/reporting are unaffected.
 
         Returns validation results
         """
         validation = {
             "errors": [],
             "valid_changes": 0,
-            "rejected_changes": 0
+            "rejected_changes": 0,
+            "truth_gated": False,
         }
 
         try:
@@ -248,6 +291,33 @@ class AutoUpgrader:
         except Exception as e:
             validation["errors"].append(f"Validation error: {str(e)}")
 
+        # P3-5 TRUTH GATE (fail-closed): a persistent self-upgrade must be backed
+        # by proof, not just be schema-valid. If TruthGate cannot admit the change
+        # set — no proof-backed outcomes, or a held-out proven-rate regression, or
+        # simply unevaluable — zero out valid_changes so Phase-5 application is
+        # skipped for EVERY caller (dry_run or not). This is what makes the apply
+        # path inert-but-non-corrupting today; it re-opens automatically once
+        # `_proven_outcomes` is fed a cross-engagement proven ledger.
+        if validation["valid_changes"] > 0:
+            try:
+                from intelligence.truth_gate import TruthGate
+                gate = TruthGate(self._proven_outcomes(engagement_id))
+                change_set = {"tool_effectiveness": (optimizations or {}).get(
+                    "changes", {}).get("tool_effectiveness", {})}
+                if not gate.supports(change_set):
+                    validation["truth_gated"] = True
+                    validation["rejected_changes"] += validation["valid_changes"]
+                    validation["valid_changes"] = 0
+                    validation["errors"].append(
+                        "TruthGate: change set not backed by non-regressing proven "
+                        "outcomes — held as dry-run (no application).")
+            except Exception as _tg_e:
+                # Fail CLOSED on any gate error — never apply on an unevaluable gate.
+                validation["truth_gated"] = True
+                validation["rejected_changes"] += validation["valid_changes"]
+                validation["valid_changes"] = 0
+                validation["errors"].append(f"TruthGate unavailable, failing closed: {_tg_e}")
+
         return validation
 
     def _apply_changes(
@@ -285,9 +355,12 @@ class AutoUpgrader:
                 json.dump(rules_package, f, indent=2)
             results["applied"].append("Saved generated rules for rollback")
 
-            # 3. Update tool metrics (non-invasive)
-            self._update_tool_metrics(optimizations, engagement_id)
-            results["applied"].append("Updated tool effectiveness metrics")
+            # P3-5: the _update_tool_metrics write is DELETED. It merged
+            # optimizer `tool_rates_adjusted` (derived from the pre-P0-9 bare
+            # status==success signal) into a persisted tool_metrics.json that no
+            # live code read back — an inert write that could only corrupt future
+            # learning. Proof-anchored effectiveness now lives in the engagement
+            # analyzer (P3-2); there is no separate metrics file to poison.
 
             # 4. Save rule recommendations (advisory, not applied directly)
             recommendations = optimizations.get("recommendations", [])
@@ -313,51 +386,6 @@ class AutoUpgrader:
             results["rollback_capability"] = False
 
         return results
-
-    def _update_tool_metrics(
-            self, optimizations: Dict[str, Any], engagement_id: str) -> None:
-        """Update tool metrics file with new effectiveness data"""
-        metrics_file = os.path.join(
-            os.path.dirname(__file__), "..", "tool_metrics.json")
-        os.makedirs(os.path.dirname(metrics_file), exist_ok=True)
-
-        # Load existing metrics
-        existing_metrics = {}
-        if os.path.exists(metrics_file):
-            try:
-                with open(metrics_file, "r") as f:
-                    existing_metrics = json.load(f)
-            except Exception as _e:
-                import logging
-                logging.getLogger(__name__).debug(
-                    f'Swallowed exception in auto_upgrader.py: {_e}')
-
-        # Merge new tool effectiveness data
-        tool_changes = optimizations.get(
-            "changes", {}).get(
-            "tool_effectiveness", {})
-        if "tool_rates_adjusted" in tool_changes:
-            if "tool_effectiveness" not in existing_metrics:
-                existing_metrics["tool_effectiveness"] = {}
-
-            for tool, rate_info in tool_changes["tool_rates_adjusted"].items():
-                if tool not in existing_metrics["tool_effectiveness"]:
-                    existing_metrics["tool_effectiveness"][tool] = {}
-
-                # Update with new data
-                existing_metrics["tool_effectiveness"][tool].update(rate_info)
-
-        # Add engagement reference
-        if "engagements_learned_from" not in existing_metrics:
-            existing_metrics["engagements_learned_from"] = []
-        existing_metrics["engagements_learned_from"].append({
-            "engagement_id": engagement_id,
-            "timestamp": datetime.now().isoformat()
-        })
-
-        # Save updated metrics
-        with open(metrics_file, "w") as f:
-            json.dump(existing_metrics, f, indent=2)
 
     def _save_upgrade_record(self, upgrade_result: Dict[str, Any]) -> None:
         """Save upgrade record for auditing and rollback"""

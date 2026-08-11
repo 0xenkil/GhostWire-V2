@@ -27,15 +27,46 @@ def remove_artifacts(text: str) -> str:
     return text
 
 
+def _collapse_carriage_returns(text: str) -> str:
+    """Collapse in-line carriage-return redraws (progress bars) WITHOUT
+    deleting real content — SANITIZE-1 (P0-0b).
+
+    The old ``re.sub(r'[^\n]*\r', '', text)`` deleted everything up to and
+    including *each* ``\\r``, so a meaningful line terminated by a lone ``\\r``
+    (a result printed without a trailing newline, a status line, an ffuf
+    ``[Status: 200]`` hit) vanished entirely — the engine then read a
+    successful tool as empty and looped repair/evasion on a tool that worked.
+
+    Faithful rule: within each physical line (split on ``\\n``), a ``\\r``
+    returns the cursor to column 0 and the following text overwrites; the
+    visible line is the **last non-empty** carriage-return segment. A trailing
+    ``\\r`` (empty tail segment) therefore keeps the text BEFORE it, never the
+    empty tail — so real result lines survive while progress redraws still
+    collapse to their final frame.
+    """
+    out_lines = []
+    for line in text.split("\n"):
+        if "\r" not in line:
+            out_lines.append(line)
+            continue
+        visible = ""
+        for seg in line.split("\r"):
+            if seg != "":
+                visible = seg
+        out_lines.append(visible)
+    return "\n".join(out_lines)
+
+
 def clean_text(text: str) -> str:
     """Universal cleaner for tool outputs and inputs. (v5.0 Universal Fix)"""
     if not text:
         return ""
     # Normalize Windows CRLF to prevent \r matching from destroying valid lines
     text = text.replace("\r\n", "\n")
-    # Simulate terminal \r (carriage return) by keeping only the text after
-    # the last \r on a line
-    text = re.sub(r'[^\n]*\r', '', text)
+    # SANITIZE-1: CR-safe collapse of terminal carriage-return redraws.
+    # Replaces the old `re.sub(r'[^\n]*\r', '', text)` that silently deleted
+    # real result lines terminated by a lone \r.
+    text = _collapse_carriage_returns(text)
     text = remove_ansi(text)
     text = remove_artifacts(text)
     return text.strip()

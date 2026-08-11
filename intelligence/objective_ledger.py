@@ -85,15 +85,23 @@ class ObjectiveLedger:
 
     # ── progress ──────────────────────────────────────────────────────────────
 
-    def update_from_findings(self, findings: list) -> list:
-        """Advance objectives from confirmed findings. Returns newly-achieved keys."""
+    def update_from_findings(self, findings: list, proof_resolver=None) -> list:
+        """Advance objectives from PROVEN findings. Returns newly-achieved keys.
+
+        P0-7 (OBJLEDGER-FALSE-WIN): an objective advances only on a finding that
+        is either (a) a genuine ACCESS type (creds/shell/initial-access — access
+        attested by its own working artifact) or (b) PROVEN via ``proof_resolver``
+        (a ProofLedger-backed finding_is_proven check). Neither the forgeable
+        ``confirmed_vulnerability`` TYPE alone nor ``severity in {high,critical}``
+        advances anything — those were the false-win path. Without a resolver
+        (legacy call), only real access types advance."""
         newly = []
+        _access_types = (
+            "valid_credential", "shell_access", "initial_access", "rce_confirmed")
         confirmed = [
             f for f in (findings or [])
-            if (f.get("type", "") or "").lower() in (
-                "confirmed_vulnerability", "valid_credential", "shell_access",
-                "initial_access", "rce_confirmed")
-            or (f.get("severity", "") or "").lower() in ("high", "critical")
+            if (f.get("type", "") or "").lower() in _access_types
+            or (proof_resolver is not None and proof_resolver(f))
         ]
         for obj in self.objectives.values():
             if obj.status in ("achieved", "abandoned"):

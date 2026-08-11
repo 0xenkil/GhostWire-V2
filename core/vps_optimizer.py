@@ -2,48 +2,17 @@
 VPS Infrastructure Optimization Before Major Scans
 Tunes SSH, networking, and filesystem for high-throughput scanning operations.
 """
-import os
-import time
-import json
-from pathlib import Path
 from utils.logger import get_logger
 from config_thresholds import VPS_HEALTH_CHECK_TIMEOUT
 
 log = get_logger("vps_optimizer")
 
-
-def _load_debug_cfg() -> dict:
-    try:
-        import uuid
-        from config_paths import LOG_DIR
-        session_id = os.getenv("SESSION_ID") or uuid.uuid4().hex[:8]
-        log_file = LOG_DIR / f"debug-{session_id}.log"
-        return {"log_file": str(log_file), "session_id": session_id}
-    except Exception as e:
-        import logging as __logging_tmp
-        __logging_tmp.getLogger(__name__).error(
-            f"Unhandled exception: {e}", exc_info=True)
-        return {"log_file": "debug.log", "session_id": "unknown"}
-
-
-def _agent_debug_log(location: str, message: str, data: dict,
-                     run_id: str = "run1", hypothesis_id: str = "H3"):
-    try:
-        dbg = _load_debug_cfg()
-        Path(dbg["log_file"]).parent.mkdir(parents=True, exist_ok=True)
-        with open(dbg["log_file"], "a", encoding="utf-8") as f:
-            f.write(json.dumps({
-                "sessionId": dbg["session_id"],
-                "runId": run_id,
-                "hypothesisId": hypothesis_id,
-                "location": location,
-                "message": message,
-                "data": data,
-                "timestamp": int(time.time() * 1000),
-            }, ensure_ascii=True) + "\n")
-    except Exception as e:
-        import sys
-        print(f"[DEBUG] Failed to write debug log: {e}", file=sys.stderr)
+# P5-3 (D-VPS-1, VPS-OPT-STUBBED): the _load_debug_cfg / _agent_debug_log pair
+# (a hardcoded run1/H3 debug side-channel that wrote JSON lines to a separate
+# debug-<session>.log) was removed — diagnostics now go through the normal
+# logger. The four no-op "_optimize_*" WSL methods that only appended
+# "Skipped (WSL)" strings were also deleted; optimize_all() keeps only the
+# three that do real remote work (dirs / cleanup / disk check).
 
 
 class VPSOptimizer:
@@ -78,25 +47,13 @@ class VPSOptimizer:
         log.info("▶ Starting WSL Infrastructure Optimization...")
 
         try:
-            # 1. Skip SSH MaxSessions tuning
-            self._optimize_ssh_maxsessions()
-
-            # 2. Increase system file descriptor limits
-            self._optimize_file_descriptors()
-
-            # 3. Tune TCP network parameters for high throughput
-            self._optimize_tcp_buffers()
-
-            # 4. Enable TCP BBR for better congestion control
-            self._optimize_congestion_control()
-
-            # 5. Create and prepare scan buffer directories
+            # Create and prepare scan buffer directories
             self._prepare_scan_directories()
 
-            # 6. Clean up old results to free disk space
+            # Clean up old results to free disk space
             self._cleanup_old_results()
 
-            # 7. Verify disk space for scans
+            # Verify disk space for scans
             self._verify_disk_space()
 
             log.info(
@@ -107,33 +64,6 @@ class VPSOptimizer:
             log.error(f"[x] WSL Optimization failed: {e}")
             return False
 
-    def _optimize_ssh_maxsessions(self):
-        """
-        Skip SSH tuning for WSL environment.
-        """
-        self.optimizations_applied.append("SSH MaxSessions: Skipped (WSL)")
-        log.info("  [+] SSH MaxSessions: Skipped (WSL)")
-
-    def _optimize_file_descriptors(self):
-        """
-        Skip sysctl for WSL.
-        """
-        self.optimizations_applied.append("File Descriptors: Skipped (WSL)")
-        log.info("  [+] File Descriptors: Skipped (WSL)")
-
-    def _optimize_tcp_buffers(self):
-        """
-        Skip TCP buffers for WSL.
-        """
-        self.optimizations_applied.append("TCP Buffers: Skipped (WSL)")
-        log.info("  [+] TCP Buffers: Skipped (WSL)")
-
-    def _optimize_congestion_control(self):
-        """
-        Skip BBR for WSL.
-        """
-        self.optimizations_applied.append("Congestion Control: Skipped (WSL)")
-        log.info("  [+] Congestion Control: Skipped (WSL)")
     def _prepare_scan_directories(self):
         """
         Create and prepare directories for scan buffers and results.
@@ -211,14 +141,9 @@ class VPSOptimizer:
                 "df -BG /tmp | tail -1 | awk '{print $4, $2}' | tr ' ' ','",
                 timeout=VPS_HEALTH_CHECK_TIMEOUT
             )
-            _agent_debug_log(
-                "core/vps_optimizer.py:disk_raw_output",
-                "Raw disk command output captured",
-                {"exit_code": exit_code, "output": (
-                    output or "").strip()[:120]},
-                run_id="run1",
-                hypothesis_id="H3",
-            )
+            log.debug(
+                f"disk raw output: exit={exit_code} "
+                f"out={(output or '').strip()[:120]!r}")
 
             if output:
                 try:
@@ -244,14 +169,9 @@ class VPSOptimizer:
                         available_gb /
                         total_gb *
                         100) if total_gb > 0 else 0
-                    _agent_debug_log(
-                        "core/vps_optimizer.py:disk_parse_success",
-                        "Parsed disk stats",
-                        {"available_gb": available_gb, "total_gb": total_gb,
-                            "percent_free": percent_free},
-                        run_id="run1",
-                        hypothesis_id="H3",
-                    )
+                    log.debug(
+                        f"parsed disk stats: available={available_gb}GB "
+                        f"total={total_gb}GB free={percent_free:.0f}%")
 
                     if available_gb < 5:
                         log.warning(
@@ -266,16 +186,9 @@ class VPSOptimizer:
                     self.optimizations_applied.append(
                         f"Disk Space: {available_gb}GB available")
                 except Exception as _pe:
-                    _agent_debug_log(
-                        "core/vps_optimizer.py:disk_parse_exception",
-                        "Failed to parse disk command output",
-                        {"raw_output": (output or "").strip()[
-                            :120], "error": str(_pe)[:80]},
-                        run_id="run1",
-                        hypothesis_id="H3",
-                    )
                     log.warning(
-                        f"  [!] Disk space parse failed (non-critical): {_pe}")
+                        f"  [!] Disk space parse failed (non-critical): {_pe} "
+                        f"(raw={(output or '').strip()[:120]!r})")
 
         except Exception as e:
             log.warning(f"  [!] Disk space check failed (non-critical): {e}")

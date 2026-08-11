@@ -13,10 +13,11 @@ from tools.tool_registry import TOOL_REGISTRY, load_custom_tools
 from tools.output_parser import OutputParser
 from core.ssh_executor import SSHExecutor
 from core.result_contracts import FragileParseFixer, ToolResult, ResultStatus
+from core.capability_registry import tool_primary_capability
 from utils.logger import get_logger
 from utils.display import warning, success
 from utils.sanitizer import clean_text
-from core.config_manager import get_config
+from core.config_loader import get_config_manager as get_config  # P5-2: one config authority
 import config_paths
 from rich.console import Console
 from rich.panel import Panel
@@ -113,22 +114,39 @@ def _agent_debug_log(location: str, message: str, data: dict,
 
 def _wsl_which(tool_name: str) -> bool:
     """
-    Check if a tool is available inside WSL (Ubuntu Linux subsystem).
-    shutil.which() only sees Windows PATH — it misses tools installed in WSL.
-    This fixes the false "not installed" report for nmap, gcc, etc.
+    Check whether a tool is on PATH.
+
+    On NATIVE Linux (a VPS — the engine's primary deployment target) the tool is
+    on THIS host's PATH, so use shutil.which directly. Only on Windows do tools
+    live inside WSL, where shutil.which would see only the Windows PATH and falsely
+    report "not installed" — there we query WSL's PATH. (Previously this ALWAYS
+    ran `wsl`, which raises FileNotFoundError on a Linux VPS, breaking every
+    tool-availability check + install.)
     """
     try:
+        import platform
+        import shutil
+        if platform.system() != "Windows":
+            return shutil.which(tool_name) is not None
         import subprocess
         result = subprocess.run(
             ["wsl", "-e", "which", tool_name],
             capture_output=True, text=True, timeout=6
         )
         return result.returncode == 0 and bool(result.stdout.strip())
-    except Exception as e:
-        import logging as __logging_tmp
-        __logging_tmp.getLogger(__name__).error(
-            f"Unhandled exception: {e}", exc_info=True)
+    except Exception:
         return False
+
+
+def _local_root_bash_argv(cmd: str) -> list:
+    """Argv to run `cmd` as ROOT in bash on the LOCAL host. On Windows the local
+    Linux is WSL (`wsl -u root -e bash -c`); on a native Linux VPS `wsl` does not
+    exist, so run directly via `sudo bash -c`. This is what lets the installer +
+    tool-locator work on a real VPS instead of raising FileNotFoundError: 'wsl'."""
+    import platform
+    if platform.system() == "Windows":
+        return ["wsl", "-u", "root", "-e", "bash", "-c", cmd]
+    return ["sudo", "bash", "-c", cmd]
 
 
 # Tools that benefit from real-time streaming (long-running)
@@ -189,6 +207,19 @@ class ToolManager:
                     "USE_WSL", "true").lower() in (
                     "true", "1", "yes")
 
+            # WSL exists ONLY on Windows. A copied-from-Windows .env often leaves
+            # USE_WSL=true on a Linux VPS; attempting the WSL executor there
+            # always fails (`wsl` binary absent), prints a misleading "DEGRADED /
+            # will run on Windows" warning, and leaves self.remote=None. On a
+            # native Linux host, remote=None IS the correct mode — tools run via
+            # the local subprocess path — so skip the doomed WSL attempt entirely.
+            import platform as _platform
+            if _use_wsl and _platform.system() != "Windows":
+                log.info(
+                    "USE_WSL is set but host is not Windows — skipping WSL "
+                    "executor; tools run locally (native-host mode).")
+                _use_wsl = False
+
             if _use_wsl:
                 from core.wsl_executor import WSLExecutor as _WSLExecutor
                 _wsl_exec = _WSLExecutor()
@@ -220,6 +251,33 @@ class ToolManager:
             self._install_lock = threading.Lock()
         with self._install_lock:
             return self._ensure_installed_unlocked(tool_name, force_install)
+
+    @staticmethod
+    def _build_go_install_cmd(module: str) -> str | None:
+        """P2-3: build a safe ``go install`` command for a validated Go module
+        path, or None if the path is unsafe. The modern recon arsenal
+        (nuclei/httpx/subfinder/katana/dnsx/naabu/gau) is Go-based and cannot be
+        installed via apt/pip — the executor only handled those, so those tools
+        were uninstallable. ``go install`` compiles for the host GOARCH
+        (VERIFIED on arm64: httpx/subfinder build+run natively), so no per-arch
+        handling is needed. The built binary lands in ``$GOBIN`` and is symlinked
+        onto ``/usr/local/bin`` so later runs find it on PATH (NEW-3)."""
+        import re as _re
+        module = (module or "").strip()
+        # A proper module path: dotted host (github.com/…) + path @ a safe version.
+        if not _re.match(
+                r'^[a-z0-9.-]+\.[a-z]{2,}/[A-Za-z0-9._~/-]+@[A-Za-z0-9][A-Za-z0-9._+-]*$',
+                module):
+            return None
+        bin_name = module.split('@')[0].rstrip('/').split('/')[-1]
+        if not _re.match(r'^[A-Za-z0-9._-]+$', bin_name):
+            return None
+        return (
+            "export PATH=$PATH:/usr/local/go/bin:$HOME/go/bin && "
+            "export GOBIN=$HOME/go/bin && "
+            f"go install {module} && "
+            f"sudo ln -sf $HOME/go/bin/{bin_name} /usr/local/bin/{bin_name}"
+        )
 
     def _ensure_installed_unlocked(
             self, tool_name: str, force_install: bool = False) -> bool:
@@ -290,6 +348,16 @@ class ToolManager:
         # 2. Attempt installation
         log.info(f"Tool '{tool_name}' not found. Installing...")
         install_cmd = tool_info.get("install", "")
+        # P2-3/P2-4: fall back to the ToolCatalog's install command (the modern
+        # Go-based recon arsenal — httpx/nuclei/subfinder/katana/dnsx/naabu/gau —
+        # lives there with a `go install` command), so a tool absent from the
+        # legacy registry is still installable.
+        if not install_cmd:
+            try:
+                from tools.tool_catalog import get_catalog
+                install_cmd = get_catalog().install_command(tool_name) or ""
+            except Exception:
+                pass
         install_success = False
         err = ""
 
@@ -318,13 +386,15 @@ class ToolManager:
                     vps_attempt += 1
                     log.info(f"VPS install attempt {vps_attempt}/{max_vps_attempts} for '{tool_name}'...")
                     
-                    # Accept only canonical apt / pip installs and transform into safe operations
+                    # Accept canonical apt / pip / go installs and transform into safe operations.
                     apt_match = re.search(r'(?:apt-get|apt)\s+(?:-y\s+)?install\s+(.+)$', current_install_cmd, re.IGNORECASE)
                     pip_match = re.search(r'(?:python3?\s+-m\s+)?pip(?:3)?\s+install\s+(.+)$', current_install_cmd, re.IGNORECASE)
-                    
+                    # P2-3: go install for the Go-based recon arsenal (apt/pip can't install them).
+                    go_match = re.search(r'\bgo\s+install\s+(\S+)\s*$', current_install_cmd, re.IGNORECASE)
+
                     exit_code = -1
                     err_out = ""
-                    
+
                     if apt_match:
                         pkgs = apt_match.group(1).strip()
                         if not re.match(r'^[A-Za-z0-9+_.:=\s-]+$', pkgs):
@@ -358,9 +428,19 @@ class ToolManager:
                                 break
                             else:
                                 exit_code, out, err_out = self.remote.execute(f"python3 -m pip install --no-input {pkgs}", timeout=tool_info.get("install_timeout", 300))
+                    elif go_match:
+                        go_cmd = self._build_go_install_cmd(go_match.group(1))
+                        if go_cmd is None:
+                            log.warning(f"Rejected AI go install for {tool_name} (unsafe module path): {go_match.group(1)[:120]}")
+                            err_out = f"Rejected unsafe go module: {go_match.group(1)[:80]}"
+                        elif not AUTO_APPROVE_INSTALLS:
+                            log.info(f"AI-suggested go install for '{tool_name}' requires operator approval (AUTO_APPROVE_INSTALLS=false)")
+                            break
+                        else:
+                            exit_code, out, err_out = self.remote.execute(go_cmd, timeout=tool_info.get("install_timeout", 600))
                     else:
-                        log.warning(f"AI install command for '{tool_name}' not recognized as safe (only apt/pip supported): {current_install_cmd[:200]}")
-                        err_out = f"Command {current_install_cmd[:50]} not recognized as safe apt/pip format"
+                        log.warning(f"AI install command for '{tool_name}' not recognized as safe (only apt/pip/go supported): {current_install_cmd[:200]}")
+                        err_out = f"Command {current_install_cmd[:50]} not recognized as safe apt/pip/go format"
                     
                     if exit_code == 0:
                         # ── VPS PATH LOCATOR ──
@@ -431,17 +511,40 @@ class ToolManager:
                     # Prepend DEBIAN_FRONTEND for apt installs
                     if "apt" in safe_cmd:
                         safe_cmd = f"DEBIAN_FRONTEND=noninteractive {safe_cmd}"
+                    # P2-3 fix (found via a live VPS run): a bare `go install ...`
+                    # run through `sudo bash -c` fails with "go: command not found"
+                    # because sudo's secure_path omits /usr/local/go/bin. Route it
+                    # through _build_go_install_cmd, which exports the Go PATH + GOBIN
+                    # and symlinks the built (arch-correct) binary onto /usr/local/bin.
+                    # This is what let gau/katana/nuclei/naabu actually install on a
+                    # native Linux VPS instead of failing (and nuclei then falling
+                    # back to a wrong-arch github binary → "Exec format error").
+                    _go_m = re.search(r'\bgo\s+install\s+(\S+)', safe_cmd)
+                    _is_go_install = False
+                    if _go_m:
+                        _go_built = self._build_go_install_cmd(_go_m.group(1))
+                        if _go_built:
+                            safe_cmd = _go_built
+                            _is_go_install = True
                     # ── AI REPAIR LOOP FOR WSL INSTALLATION ──
                     max_attempts = 3
                     attempt = 0
                     current_install_cmd = safe_cmd
-                    
+
                     while attempt < max_attempts:
                         attempt += 1
                         log.info(f"Running WSL install attempt {attempt}/{max_attempts} for '{tool_name}': {current_install_cmd[:120]}")
-                        
+
+                        # go install must run as the ENGINE'S user, NOT root: under
+                        # `sudo bash` $HOME=/root, so the binary lands in /root/go/bin
+                        # which the non-root user can't reach. Run go-installs via a
+                        # plain user bash (the embedded `sudo ln` elevates only for the
+                        # /usr/local/bin symlink); apt/pip still run as root.
+                        _install_argv = (["bash", "-c", current_install_cmd]
+                                         if _is_go_install
+                                         else _local_root_bash_argv(current_install_cmd))
                         result = subprocess.run(
-                            ["wsl", "-u", "root", "-e", "bash", "-c", current_install_cmd],
+                            _install_argv,
                             capture_output=True, text=True, timeout=300,
                         )
                         
@@ -470,14 +573,14 @@ class ToolManager:
                                     f"-type f -name '{binary}' -executable 2>/dev/null "
                                     f"| grep -v 'Permission denied' | head -n 1")
                                 find_res = subprocess.run(
-                                    ["wsl", "-u", "root", "-e", "bash", "-c", find_cmd],
+                                    _local_root_bash_argv(find_cmd),
                                     capture_output=True, text=True, timeout=60,
                                 )
                                 found_path = find_res.stdout.strip()
                                 if found_path:
                                     log.info(f"Locator found '{binary}' at {found_path}. Symlinking to /usr/local/bin...")
                                     link_cmd = f"ln -sf '{found_path}' '/usr/local/bin/{binary}'"
-                                    subprocess.run(["wsl", "-u", "root", "-e", "bash", "-c", link_cmd], timeout=15)
+                                    subprocess.run(_local_root_bash_argv(link_cmd), timeout=15)
                                     if _wsl_which(binary):
                                         install_success = True
                                         log.info(f"[+] Symlink successful. '{tool_name}' is now accessible.")
@@ -867,8 +970,9 @@ class ToolManager:
         if subcmd:
             help_cmd = f"{tool_name} {subcmd} --help 2>&1 || {help_cmd}"
 
-        h_exit, help_out, _h_err = self.remote.execute(
-            help_cmd, timeout=15) if self.remote else (1, "", "")
+        # Fetch --help on the execution host (remote OR local) so grounding works
+        # for any tool on a native VPS, not only in remote mode.
+        h_exit, help_out, _h_err = self._exec_on_host(help_cmd, timeout=15)
         if not help_out.strip() and getattr(_h_err, "strip", lambda: "")():
             help_out = _h_err
 
@@ -902,7 +1006,13 @@ class ToolManager:
         Returns "" if help can't be obtained.
         """
         tool_name = (tool_name or "").lower().strip()
-        if not tool_name or not self.remote:
+        # NOTE: no `not self.remote` guard here. Help is fetched via
+        # _exec_on_host (line below), which runs local-or-remote — so grounding
+        # must work on a native-local host (self.remote is None) too. The old
+        # guard early-returned "" whenever remote was None, silently disabling
+        # ALL help-grounding on a native VPS (the config this engine actually
+        # runs in: WSL connect fails on Linux → remote stays None).
+        if not tool_name:
             return ""
         subcmd = ""
         if tool_name == "gobuster":
@@ -918,7 +1028,9 @@ class ToolManager:
         if subcmd:
             help_cmd = f"{tool_name} {subcmd} --help 2>&1 || {help_cmd}"
         try:
-            _ec, help_out, _err = self.remote.execute(help_cmd, timeout=15)
+            # Fetch --help on the execution host (remote OR local) so grounding
+            # can correct commands for any tool on a native VPS too.
+            _ec, help_out, _err = self._exec_on_host(help_cmd, timeout=15)
         except Exception as e:
             log.debug(f"help-brief fetch failed for {tool_name}: {e}")
             self._help_brief_cache[cache_key] = ""
@@ -1005,8 +1117,6 @@ class ToolManager:
         its path. Universal input for ANY tool that needs a host list. Cached and
         refreshed per call so it always reflects the latest findings.
         """
-        if not self.remote:
-            return None
         try:
             import posixpath
             import config_paths
@@ -1033,29 +1143,83 @@ class ToolManager:
             hosts = sorted(h for h in hosts if h and "." in h)
             if not hosts:
                 return None
-            # Resolve to an ABSOLUTE path — a quoted '~' does not expand in the
-            # shell, so a tool given '~/…/recon_hosts.txt' would not find it.
-            base_dir = config_paths.WSL_TEMP_DIR
-            if base_dir.startswith("~"):
-                if not getattr(self, "_remote_home_dir", None):
-                    ec, out, _ = self.remote.execute("echo $HOME", timeout=5)
-                    self._remote_home_dir = out.strip() if ec == 0 and out.strip() else "/root"
-                base_dir = base_dir.replace("~", self._remote_home_dir, 1)
-            path = posixpath.join(base_dir, "recon_hosts.txt")
-            self.remote.execute(f"mkdir -p {posixpath.dirname(path)}", timeout=5)
-            self.remote.execute(f"rm -f {path}", timeout=5)
-            for i in range(0, len(hosts), 40):
-                chunk = "\n".join(hosts[i:i + 40])
-                self.remote.execute(f"echo -n {shlex.quote(chunk + chr(10))} >> {path}", timeout=10)
-            return path
+            # Resolve to an ABSOLUTE path. On a native VPS (no remote) write to a
+            # local temp dir; in remote mode expand the remote $HOME.
+            if self.remote:
+                base_dir = config_paths.WSL_TEMP_DIR
+                if base_dir.startswith("~"):
+                    if not getattr(self, "_remote_home_dir", None):
+                        ec, out, _ = self.remote.execute("echo $HOME", timeout=5)
+                        self._remote_home_dir = out.strip() if ec == 0 and out.strip() else "/root"
+                    base_dir = base_dir.replace("~", self._remote_home_dir, 1)
+                path = posixpath.join(base_dir, "recon_hosts.txt")
+            else:
+                import tempfile as _tf
+                path = posixpath.join(_tf.gettempdir(), "recon_hosts.txt")
+            if self._materialize_file(path, "\n".join(hosts) + "\n"):
+                return path
+            return None
         except Exception as e:
             log.debug(f"canonical hosts file materialization failed: {e}")
             return None
 
+    def _exec_on_host(self, cmd: str, timeout: int = 15):
+        """Run `cmd` on the EXECUTION host, returning (exit_code, stdout, stderr).
+        Uses the remote executor when one is wired (WSL/VPS), else a LOCAL bash
+        subprocess. This is the ONE generic seam for read-only host commands
+        (tool `--help` fetch, path checks, wordlist writes) so they work whether
+        tools run remotely or locally — NOT per-tool, works for any tool the AI
+        picks, including ones neither of us has seen."""
+        try:
+            if self.remote:
+                return self.remote.execute(cmd, timeout=timeout)
+            import subprocess
+            p = subprocess.run(["bash", "-c", cmd], capture_output=True,
+                               text=True, timeout=timeout)
+            return (p.returncode, p.stdout or "", p.stderr or "")
+        except Exception as e:
+            return (1, "", str(e))
+
+    def _path_exists(self, path: str) -> bool:
+        """Does `path` exist on the EXECUTION host? Uses the remote executor when
+        one is wired (WSL/VPS), else the LOCAL filesystem — so command auto-repair
+        (wordlist/host-file resolution) works on a native Linux VPS where tools run
+        locally (self.remote is None), not only in remote mode."""
+        try:
+            if self.remote:
+                ec, _, _ = self.remote.execute(f'test -e "{path}"', timeout=5)
+                return ec == 0
+            import os as _os
+            return _os.path.exists(_os.path.expanduser(path))
+        except Exception:
+            return False
+
+    def _materialize_file(self, path: str, content: str) -> bool:
+        """Write `content` to `path` on the execution host (remote or local).
+        Returns True on a successful write (remote: the write commands issued
+        without error; local: the file exists and is non-empty)."""
+        try:
+            if self.remote:
+                import posixpath
+                self.remote.execute(
+                    f"mkdir -p {posixpath.dirname(path)} 2>/dev/null", timeout=5)
+                self.remote.execute(
+                    f"printf '%s' {shlex.quote(content)} > {shlex.quote(path)}", timeout=10)
+                return True
+            import os as _os
+            path = _os.path.expanduser(path)
+            _os.makedirs(_os.path.dirname(path) or ".", exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(content)
+            return _os.path.getsize(path) > 0
+        except Exception as _e:
+            log.debug(f"materialize_file failed for {path}: {_e}")
+            return False
+
     def _canonical_wordlist(self) -> str | None:
-        """Return a real wordlist path that EXISTS in WSL, for any tool whose
-        wordlist argument points at a missing/placeholder file or the literal
-        {WORDLIST} token.
+        """Return a real wordlist path that EXISTS on the execution host, for any
+        tool whose wordlist argument points at a missing/placeholder file or the
+        literal {WORDLIST} token.
 
         Order: (1) the engine's AI-provisioned, tech-stack-targeted micro-wordlist
         (preferred); (2) standard installed lists; (3) a tiny generic fallback we
@@ -1063,12 +1227,15 @@ class ToolManager:
         missing file. (3) is last-resort infrastructure, not attack logic — the
         AI's targeted list always wins above it. Never returns None when a real
         list can be found or written."""
-        if not self.remote:
-            return None
         if getattr(self, "_cached_wordlist", None):
             return self._cached_wordlist
         import config_paths as _cp
-        _wd = str(_cp.WSL_TEMP_DIR).rstrip("/")
+        # Writable temp dir: the remote workspace when remote, else a local temp.
+        if self.remote:
+            _wd = str(_cp.WSL_TEMP_DIR).rstrip("/")
+        else:
+            import tempfile as _tf
+            _wd = _tf.gettempdir().rstrip("/")
         candidates = [
             f"{_wd}/ai_wordlist.txt",   # AI-provisioned micro-wordlist (preferred)
             "/usr/share/wordlists/dirb/common.txt",
@@ -1078,35 +1245,24 @@ class ToolManager:
             "/usr/share/wordlists/seclists/Discovery/Web-Content/common.txt",
         ]
         for c in candidates:
-            try:
-                ec, _, _ = self.remote.execute(f'test -e "{c}"', timeout=5)
-                if ec == 0:
-                    self._cached_wordlist = c
-                    return c
-            except Exception:
-                continue
+            if self._path_exists(c):
+                self._cached_wordlist = c
+                return c
         # LAST RESORT: nothing installed and the AI list wasn't provisioned —
         # write a tiny generic fallback so the tool RUNS rather than dying on a
         # missing file. The AI's targeted list is always preferred above.
-        try:
-            fb = f"{_wd}/fallback_wordlist.txt"
-            words = ("admin api login dashboard config backup .env .git/HEAD "
-                     "robots.txt sitemap.xml wp-admin wp-login.php phpinfo.php "
-                     "test dev staging uploads static assets js css images v1 v2 "
-                     "graphql swagger api-docs actuator health debug console "
-                     "server-status info status .well-known .htaccess admin.php")
-            self.remote.execute(
-                f"mkdir -p {_wd} 2>/dev/null; printf '%s\\n' {words} > {fb}",
-                timeout=10)
-            ec, _, _ = self.remote.execute(f'test -s "{fb}"', timeout=5)
-            if ec == 0:
-                self._cached_wordlist = fb
-                log.info(
-                    f"[WORDLIST] No installed/AI wordlist found — wrote generic "
-                    f"fallback so dir-busting can run: {fb}")
-                return fb
-        except Exception as _e:
-            log.debug(f"fallback wordlist write failed: {_e}")
+        fb = f"{_wd}/fallback_wordlist.txt"
+        words = ("admin\napi\nlogin\ndashboard\nconfig\nbackup\n.env\n.git/HEAD\n"
+                 "robots.txt\nsitemap.xml\nwp-admin\nwp-login.php\nphpinfo.php\n"
+                 "test\ndev\nstaging\nuploads\nstatic\nassets\njs\ncss\nimages\nv1\nv2\n"
+                 "graphql\nswagger\napi-docs\nactuator\nhealth\ndebug\nconsole\n"
+                 "server-status\ninfo\nstatus\n.well-known\n.htaccess\nadmin.php\n")
+        if self._materialize_file(fb, words):
+            self._cached_wordlist = fb
+            log.info(
+                f"[WORDLIST] No installed/AI wordlist found — wrote generic "
+                f"fallback so dir-busting can run: {fb}")
+            return fb
         return None
 
     def _canonical_substitute(self, missing_path: str, preceding_flag: str) -> str | None:
@@ -1151,11 +1307,7 @@ class ToolManager:
             if not (val.startswith("/") or val.startswith("~")
                     or any(val.endswith(e) for e in _EXTS)):
                 return m.group(0)
-            try:
-                ec, _, _ = self.remote.execute(f'test -e "{val}"', timeout=5)
-            except Exception:
-                return m.group(0)
-            if ec == 0:
+            if self._path_exists(val):
                 return m.group(0)  # file exists — leave it
             canonical = self._canonical_substitute(val, flag.rstrip("="))
             if canonical:
@@ -1171,12 +1323,23 @@ class ToolManager:
             return command
 
     def _validate_and_fix_command(self, command: str, tool_name: str) -> str:
-        """Dynamic validation and auto-correction of file paths in commands."""
-        if not self.remote:
-            return command
+        """Dynamic validation and auto-correction of file paths in commands.
 
+        Runs whether tools execute REMOTELY (WSL/VPS) or LOCALLY (native Linux
+        VPS, self.remote is None). The old code returned early with no remote, so
+        on a native VPS NO command was ever auto-repaired — the literal
+        {WORDLIST} / missing-wordlist bugs. The path checks below use _path_exists
+        (local-or-remote); flag validation is best-effort."""
         # 1. Proactive flag validation
-        command = self.validate_and_filter_flags(command, tool_name)
+        try:
+            command = self.validate_and_filter_flags(command, tool_name)
+        except Exception as _vf:
+            log.debug(f"flag validation skipped (non-fatal): {_vf}")
+        # 1a2. Expand a leading ~/ in every arg to the execution host's absolute
+        # home. A quoted '~/redteam-workspace/...' output path reaches the tool
+        # as a LITERAL ~ it cannot expand, so gau/masscan/whatweb aborted trying
+        # to open it. Universal (any tool, any arg), local-or-remote.
+        command = self._expand_home_tokens(command)
         # 1b. Universal glued-flag input-file repair (`--input-file=missing.txt`)
         command = self._fix_glued_path_flags(command)
 
@@ -1199,11 +1362,7 @@ class ToolManager:
             flag, val = m.group(1), m.group(2)
             if "{" in val or "://" in val or "FUZZ" in val:
                 return m.group(0)
-            try:
-                ec, _, _ = self.remote.execute(f'test -e "{val}"', timeout=5)
-            except Exception:
-                return m.group(0)
-            if ec == 0:
+            if self._path_exists(val):
                 return m.group(0)  # exists — leave it
             wl = self._canonical_wordlist()
             if wl:
@@ -1302,8 +1461,13 @@ class ToolManager:
             # with shlex.join quoting $HOME
             if part.startswith("~"):
                 if not hasattr(self, "_remote_home_dir"):
-                    ec, out, _ = self.remote.execute("echo $HOME", timeout=5)
-                    self._remote_home_dir = out.strip() if ec == 0 else "/root"
+                    # local-or-remote: _exec_on_host runs on the execution host
+                    # whether that's WSL/VPS (remote) or this box (remote is None).
+                    ec, out, _ = self._exec_on_host("echo $HOME", timeout=5)
+                    _home = (out or "").strip()
+                    if ec != 0 or not _home:
+                        _home = os.path.expanduser("~") or "/root"
+                    self._remote_home_dir = _home
                 test_path = part.replace("~", self._remote_home_dir, 1)
             else:
                 test_path = part
@@ -1318,10 +1482,11 @@ class ToolManager:
                 fixed_parts.append(test_path)
                 continue
 
-            # Test if path exists remotely (use double quotes to allow $HOME
-            # expansion)
-            exit_code, _, _ = self.remote.execute(
-                f'test -e "{test_path}"', timeout=5)
+            # Test if the path exists on the execution host (local-or-remote).
+            # _path_exists uses `test -e` remotely or os.path.exists locally, so
+            # this repair works on a native VPS (self.remote is None) too — the
+            # old direct self.remote.execute crashed there with AttributeError.
+            exit_code = 0 if self._path_exists(test_path) else 1
             if exit_code != 0:
                 basename = part.split('/')[-1]
                 # If basename is extremely common or empty, it's risky to
@@ -1340,7 +1505,9 @@ class ToolManager:
                     continue
 
                 find_cmd = f"find / -not -path '*/\\.*' -not -path '/proc/*' -not -path '/sys/*' -not -path '/snap/*' -name '{basename}' -type f 2>/dev/null | head -n 1"
-                f_exit, stdout, stderr = self.remote.execute(
+                # local-or-remote host exec (was self.remote.execute → crashed
+                # on a native VPS where remote is None).
+                f_exit, stdout, stderr = self._exec_on_host(
                     find_cmd, timeout=30)
                 real_path = stdout.strip()
                 if f_exit == 0 and real_path:
@@ -1366,15 +1533,106 @@ class ToolManager:
                 fixed_parts.append(test_path)
 
         try:
-            return shlex.join(fixed_parts)
+            final_cmd = shlex.join(fixed_parts)
         except AttributeError:
             # Fallback for Python < 3.8
-            return " ".join([f"'{p}'" if " " in p else p for p in fixed_parts])
+            final_cmd = " ".join([f"'{p}'" if " " in p else p for p in fixed_parts])
+        # Create the parent dir of any OUTPUT-file arg on the execution host, so
+        # a tool that writes results (nmap -oN, gau --o, ffuf -o, …) never aborts
+        # on a missing directory. Universal (keys off standard output-flag names),
+        # runs local-or-remote — the ~/redteam-workspace/<eng>/results/ tree is
+        # not pre-created on a native-local host.
+        self._ensure_output_dirs(final_cmd)
+        return final_cmd
+
+    def _expand_home_tokens(self, command: str) -> str:
+        """Expand a leading ``~/`` in each argument to the execution host's
+        absolute home (and the ``--flag=~/path`` glued form). Best-effort,
+        tool-agnostic, local-or-remote; never raises. Tools get their args with
+        the shell already gone, so a literal ``~`` never expands — this makes
+        ``~/redteam-workspace/...`` paths openable for ANY tool."""
+        if "~/" not in command:
+            return command
+        home = getattr(self, "_remote_home_dir", None)
+        if not home:
+            try:
+                ec, out, _ = self._exec_on_host("echo $HOME", timeout=5)
+                home = (out or "").strip()
+            except Exception:
+                home = ""
+            if not home:
+                import os as _os
+                home = _os.path.expanduser("~") or "/root"
+            self._remote_home_dir = home
+        try:
+            toks = shlex.split(command)
+        except Exception:
+            return command
+        changed = False
+        for i, tk in enumerate(toks):
+            if tk.startswith("~/"):
+                toks[i] = home + tk[1:]          # ~/x -> /home/user/x
+                changed = True
+            elif "=~/" in tk:                     # --out=~/x -> --out=/home/user/x
+                k, v = tk.split("=", 1)
+                if v.startswith("~/"):
+                    toks[i] = f"{k}={home}{v[1:]}"
+                    changed = True
+        if not changed:
+            return command
+        try:
+            return shlex.join(toks)
+        except Exception:
+            return command
+
+    def _ensure_output_dirs(self, command: str) -> None:
+        """mkdir -p the directory of every output-file argument on the execution
+        host (local-or-remote). Tool-agnostic: recognises the standard output
+        flag NAMES, never a per-tool table. Best-effort and never raises."""
+        OUT_FLAGS = {"-o", "-on", "-ox", "-og", "-oa", "-oj", "-os", "-of",
+                     "--output", "--output-file", "--out", "-out", "--o", "-of"}
+        try:
+            toks = shlex.split(command)
+        except Exception:
+            toks = command.split()
+        vals = []
+        for idx, tk in enumerate(toks):
+            low = tk.lower()
+            if "=" in tk and low.split("=", 1)[0] in OUT_FLAGS:
+                vals.append(tk.split("=", 1)[1])
+            elif low in OUT_FLAGS and idx + 1 < len(toks):
+                nxt = toks[idx + 1]
+                if not nxt.startswith("-"):
+                    vals.append(nxt)
+        import posixpath
+        seen = set()
+        for v in vals:
+            if not v or "://" in v or "{" in v:
+                continue
+            d = posixpath.dirname(v.strip("'\""))
+            if not d or d == "." or d in seen:
+                continue
+            seen.add(d)
+            # A leading ~ must reach the shell unquoted to expand; absolute/relative
+            # dirs are quoted to survive spaces.
+            target = d if d.startswith("~") else shlex.quote(d)
+            try:
+                self._exec_on_host(f"mkdir -p {target}", timeout=10)
+            except Exception as _md_e:
+                log.debug(f"[OUTPUT DIR] mkdir -p {d} skipped (non-fatal): {_md_e}")
 
     def run(self, tool_name: str, command: str, phase: str,
             timeout: int = None, save_raw: bool = True,
-            output_path: str | Path = None, silent: bool = False) -> ToolResult:
-        """Primary method to run any tool with full visibility."""
+            output_path: str | Path = None, silent: bool = False,
+            evasion_applied: str = None) -> ToolResult:
+        """Primary method to run any tool with full visibility.
+
+        P3-3: `evasion_applied` names the WAF-evasion tactic applied to this
+        invocation (from the caller's evasion loop). It is stamped onto the
+        result and persisted to tool_runs.evasion_applied so the batch WAF
+        learner can attribute effectiveness from the durable log. Default None =
+        no evasion (the common case), which persists as NULL exactly as before."""
+        self._pending_evasion = evasion_applied
         tool_name = tool_name.lower()
         from tools.tool_registry import TOOL_TIMEOUTS
         start = time.time()
@@ -1517,23 +1775,18 @@ class ToolManager:
                         continue
 
             # WAF Block Detection (403/429/CAPTCHA) - MUST happen inside loop
-            # for evasion to trigger
-            _WAF_EXEMPT_TOOLS = {
-                "nmap",
-                "sslscan",
-                "masscan",
-                "dig",
-                "naabu",
-                "subfinder"}
-            if result.success and tool_name not in _WAF_EXEMPT_TOOLS:
-                combined = (result.stdout + result.stderr).lower()
-                waf_markers = [
-                    "403 forbidden", "429 too many requests", "cloudflare ray id",
-                    "please verify you are human", "access denied", "waf block",
-                    "security challenge", "attention required! | cloudflare",
-                    "error 1020"
-                ]
-                if any(marker in combined for marker in waf_markers):
+            # for evasion to trigger.
+            # P4-4 (b): the hardcoded `_WAF_EXEMPT_TOOLS` exempt list + loose
+            # substring markers ("403" matching ANYWHERE) are replaced by a tight
+            # "HTTP-block-of-the-tool's-own-request" signal (a status line/tag or a
+            # specific challenge body). A scanner that prints "403" as DATA
+            # (nmap/subfinder — validated on the live VM 2026-08-06) no longer
+            # false-blocks, WITHOUT any per-tool exempt list.
+            if result.success:
+                from core.egress_probe import looks_like_http_block
+                _raw = result.stdout + result.stderr
+                if looks_like_http_block(_raw):
+                    combined = _raw.lower()
                     if tool_name == "whatweb" and any(u in combined for u in [
                                                       "httpserver[", "title[", "ip["]):
                         log.info(
@@ -1793,6 +2046,26 @@ class ToolManager:
                         content, encoding="utf-8", errors="replace")
                 except Exception as e:
                     log.error(f"Failed to write synced file: {e}")
+
+        # P0-9 — Honest success signal. A run that CLAIMS plain SUCCESS but
+        # produced NONE of the KIND of result its capability implies is recorded
+        # as NO_FINDINGS, not SUCCESS. The verdict is keyed off the PARSED output
+        # (produced_result) and the static capability table, NOT a per-tool banner
+        # heuristic — so a banner-only nmap (exit 0, zero parsed ports) stops
+        # masquerading as a win, and the objective/self-awareness layers downstream
+        # stop counting empty runs as progress. Only plain SUCCESS is inspected:
+        # the whatweb-behind-WAF ("partial_success"→PARTIAL) and file-fallback
+        # ("fallback_success") carve-outs already represent a human-decided useful
+        # signal and are left untouched; the curl/httpx http_probe carve-outs stay
+        # SUCCESS because produced_result treats "got a response body" as a result.
+        _status_val = getattr(result.status, "value", result.status)
+        if _status_val == ResultStatus.SUCCESS.value:
+            _cap = tool_primary_capability(tool_name)
+            if not result.produced_result(_cap):
+                result.status = ResultStatus.NO_FINDINGS
+                log.info(
+                    f"[P0-9] {tool_name} exited SUCCESS but produced no "
+                    f"{_cap or 'parsed'} result — recording NO_FINDINGS.")
 
         self._log_result(result, phase)
         return result
@@ -2075,7 +2348,16 @@ class ToolManager:
             )
 
     def _log_result(self, result: ToolResult, phase: str) -> None:
-        self.store.log_tool_run(
+        # P3-3: the evasion tactic the caller applied to THIS run (set at run()
+        # entry; every run() call overwrites it, default None, so it never leaks
+        # across calls). Stamp it onto the result and persist it so the batch WAF
+        # learner can attribute per-tactic effectiveness from the durable log.
+        _evasion = getattr(self, "_pending_evasion", None)
+        if _evasion and not getattr(result, "evasion_applied", None):
+            result.evasion_applied = _evasion
+        # P0-10: capture the persisted tool_runs.id onto the result so any
+        # finding derived from this run can carry an EXACT originating-run link.
+        run_id = self.store.log_tool_run(
             engagement_id=self.session.engagement_id,
             phase=phase,
             tool=result.tool,
@@ -2086,5 +2368,10 @@ class ToolManager:
             stdout=result.stdout,
             stderr=result.stderr,
             exit_code=result.exit_code,
-            duration=result.duration
+            duration=result.duration,
+            evasion_applied=getattr(result, "evasion_applied", None),
         )
+        try:
+            result.tool_run_id = int(run_id) if run_id is not None else None
+        except (TypeError, ValueError):
+            result.tool_run_id = None

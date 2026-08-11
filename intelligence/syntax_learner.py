@@ -12,17 +12,21 @@ log = get_logger("syntax_learner")
 PH_TARGET = "<TARGET>"
 PH_WORKDIR = "<WORKDIR>"
 
-# A command is only worth remembering if it actually WORKED. These markers (any
-# tool, no per-tool logic) mean the captured output is really a failure that was
-# mis-scored as success upstream — never learn from it, or we poison generation
-# (e.g. nmap's raw-socket "QUITTING!" once got stored as good syntax).
-_HARD_FAIL_MARKERS = (
-    "quitting", "operation not permitted", "permission denied",
-    "requires root", "no such file", "command not found", "cannot find",
+# A command is only worth remembering if it actually WORKED. P3-1: the generic
+# PROCESS-failure markers now live in ONE shared source (learning_signal); this
+# module adds SYNTAX-validity markers on top (usage:/invalid option/…), because
+# "don't learn from a usage dump" is a syntax-learning concern distinct from the
+# learning-outcome signal. Combined = shared + syntax-specific, so nothing the
+# old broad tuple caught is lost (e.g. nmap's raw-socket "QUITTING!").
+from intelligence.learning_signal import HARD_FAIL_MARKERS as _SHARED_FAIL_MARKERS
+
+_SYNTAX_FAIL_MARKERS = (
+    "quitting", "requires root", "no such file", "cannot find",
     "unrecognized", "invalid option", "no such option", "unknown flag",
     "flag provided but not defined", "usage:", "could not resolve",
     "name or service not known", "no targets were specified",
 )
+_HARD_FAIL_MARKERS = tuple(_SHARED_FAIL_MARKERS) + _SYNTAX_FAIL_MARKERS
 
 # Per-engagement absolute paths look like `…/eng_<hex>/…`. Abstract the whole
 # prefix up to and including the engagement id so the remainder (sub-path +

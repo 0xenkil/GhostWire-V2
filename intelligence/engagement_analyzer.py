@@ -24,6 +24,42 @@ class EngagementAnalyzer:
         self.store = store
         self.insights = {}
 
+    # P3-2: proof-anchored tool-effectiveness join. Uses the P0-10 EXACT link
+    # (findings.tool_run_id → tool_runs.id) — not a target-fuzzy guess — to learn
+    # which runs actually produced findings, and which produced PROVEN ones
+    # (finding_is_proven over the engagement's ProofLedger). Returns
+    # (finding_run_ids, proven_run_ids).
+    _CLEAN_RUN_STATUSES = frozenset(
+        {"success", "partial", "partial_success", "fallback_success"})
+
+    def _run_finding_join(self, engagement_id: str):
+        finding_run_ids, proven_run_ids = set(), set()
+        try:
+            findings = self.store.get_all_findings(engagement_id) or []
+        except Exception:
+            return finding_run_ids, proven_run_ids
+        by_run = defaultdict(list)
+        for f in findings:
+            rid = f.get("tool_run_id")
+            if rid is not None:
+                by_run[rid].append(f)
+        ledger = None
+        try:
+            from core.proof import ProofLedger
+            ledger = ProofLedger(self.store, engagement_id)
+        except Exception:
+            ledger = None
+        from core.proof import finding_is_proven
+        for rid, fs in by_run.items():
+            finding_run_ids.add(rid)
+            if ledger is not None:
+                try:
+                    if any(finding_is_proven(f, ledger) for f in fs):
+                        proven_run_ids.add(rid)
+                except Exception:
+                    pass
+        return finding_run_ids, proven_run_ids
+
     def analyze_engagement(self, engagement_id: str) -> Dict[str, Any]:
         """
         Analyze a completed engagement and extract insights
@@ -89,31 +125,44 @@ class EngagementAnalyzer:
             "successful_tools": [],
             "failed_tools": [],
             "tool_timings": {},
-            "tool_rates": {}
+            "tool_rates": {},
+            "proven_tools": [],  # P3-2: tools whose runs produced PROVEN findings
         }
 
         try:
             # Get tool runs from centralized database
             tool_runs = self.store.get_tool_runs(engagement_id)
+            # P3-2: proof-anchored via the P0-10 exact join.
+            finding_run_ids, proven_run_ids = self._run_finding_join(engagement_id)
 
             success_count = defaultdict(int)
             fail_count = defaultdict(int)
+            proven_count = defaultdict(int)
             total_time = defaultdict(float)
             run_count = defaultdict(int)
 
             for run in tool_runs:
                 tool_name = run.get("tool", "unknown")
                 status = run.get("status", "failed")
-                success = status == "success"
+                rid = run.get("id")
+                # PROOF-ANCHORED effectiveness (P3-2): a run counts as effective
+                # when it produced a PROVEN finding (exact join) OR ran clean with
+                # a P0-9-honest status — NEVER a bare status=='success' with
+                # nothing behind it (TOOLMGR-1 / RC-SUCCESS-DEF).
+                is_proven_run = rid in proven_run_ids
+                success = is_proven_run or (status in self._CLEAN_RUN_STATUSES)
                 duration = run.get("duration", 0)
 
+                if is_proven_run:
+                    proven_count[tool_name] += 1
                 if success:
                     success_count[tool_name] += 1
                     effectiveness["successful_tools"].append({
                         "tool": tool_name,
                         "duration": duration,
                         # Use stdout field, first 100 chars
-                        "output": run.get("stdout", "")[:100]
+                        "output": run.get("stdout", "")[:100],
+                        "proven": is_proven_run,
                     })
                 else:
                     fail_count[tool_name] += 1
@@ -132,14 +181,21 @@ class EngagementAnalyzer:
                             list(fail_count.keys())):
                 total = success_count[tool] + fail_count[tool]
                 rate = success_count[tool] / total if total > 0 else 0
+                pcount = proven_count[tool]
 
                 effectiveness["tool_rates"][tool] = {
                     "success_rate": rate,
                     "successes": success_count[tool],
                     "failures": fail_count[tool],
                     "total_runs": total,
-                    "avg_duration": total_time[tool] / run_count[tool] if run_count[tool] > 0 else 0
+                    "avg_duration": total_time[tool] / run_count[tool] if run_count[tool] > 0 else 0,
+                    # P3-2: the proof-anchored signal learners should prefer over
+                    # bare success_rate.
+                    "proven": pcount,
+                    "proven_rate": pcount / total if total > 0 else 0,
                 }
+                if pcount > 0 and tool not in effectiveness["proven_tools"]:
+                    effectiveness["proven_tools"].append(tool)
 
         except Exception as e:
             effectiveness["error"] = str(e)
@@ -264,25 +320,36 @@ class EngagementAnalyzer:
                         if tool not in patterns["tools_blocked"]:
                             patterns["tools_blocked"].append(tool)
 
-            # Get tool runs to see what succeeded and which evasion worked
+            # Get tool runs to see what succeeded and which evasion worked.
+            # P3-2: an evasion vector counts as effective only when its run
+            # actually PRODUCED a finding (P0-10 exact join) or ran clean with a
+            # P0-9-honest status — a bare status=='success' after a WAF block
+            # otherwise credited evasion that changed nothing.
             tool_runs = self.store.get_tool_runs(engagement_id)
+            finding_run_ids, proven_run_ids = self._run_finding_join(engagement_id)
             evasion_stats = defaultdict(int)
 
             for run in tool_runs:
                 tool = run.get("tool", "")
                 status = run.get("status", "")
                 evasion = run.get("evasion_applied", "none")
+                rid = run.get("id")
 
-                if status == "success":
+                produced = (rid in finding_run_ids) or (
+                    status in self._CLEAN_RUN_STATUSES)
+                if produced:
                     if tool:
                         successful_tools[tool] += 1
                         if tool not in patterns["tools_effective"]:
                             patterns["tools_effective"].append(tool)
 
-                    # Track effective evasion vectors
+                    # Track effective evasion vectors — weight a proven run higher
+                    # so a vector that produced a PROVEN finding ranks above one
+                    # that merely ran clean.
                     if evasion and evasion != "none":
+                        weight = 2 if rid in proven_run_ids else 1
                         for vector in evasion.split(","):
-                            evasion_stats[vector] += 1
+                            evasion_stats[vector] += weight
 
                 elif "403" in str(run.get("stdout", "")) or "blocked" in str(run.get("stdout", "")).lower():
                     if tool:

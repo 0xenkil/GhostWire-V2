@@ -29,6 +29,16 @@ def _fake(existing):
     f.validate_and_filter_flags = lambda c, t: c
     f._fix_glued_path_flags = lambda c: c
     f._canonical_wordlist = lambda: ToolManager._canonical_wordlist(f)
+    # The resolver now goes through the generic local-or-remote helpers; bind them.
+    f._path_exists = lambda p: ToolManager._path_exists(f, p)
+    f._materialize_file = lambda p, c: ToolManager._materialize_file(f, p, c)
+    # The path-repair loop also expands ~ and does the find-fallback via
+    # _exec_on_host (local-or-remote). Bind it so the fake exercises that path.
+    f._exec_on_host = lambda c, timeout=15: ToolManager._exec_on_host(f, c, timeout)
+    # _validate_and_fix_command now also mkdir -p's output dirs at the end.
+    f._ensure_output_dirs = lambda c: ToolManager._ensure_output_dirs(f, c)
+    # ...and expands a leading ~/ in args to the host home.
+    f._expand_home_tokens = lambda c: ToolManager._expand_home_tokens(f, c)
     return f, ToolManager
 
 

@@ -32,39 +32,20 @@ class ReportingAgent(BaseAgent):
         info(f"[VERDICT] {engagement_verdict['verdict']} — "
              f"{len(proven_vulns)} proven vuln(s), {len(leads)} unverified lead(s)")
 
-        # FIX E: Severity Demotion Gate
-        # Downgrade High/Critical findings that lack a proven exploit
-        weaponization_data = self.store.get_phase_data(
-            self.session.engagement_id, "weaponization") or {}
-        proven_exploits = weaponization_data.get("proven_exploits", [])
-        # Extract proven finding details/types for matching
-        proven_signatures = [str(p.get("proof", "")).lower()[:50]
-                             for p in proven_exploits]
-        proven_signatures.extend(
-            [str(p.get("type", "")).lower() for p in proven_exploits])
-
+        # FIX E / P0-8: Severity Demotion Gate.
+        # Downgrade High/Critical findings that are NOT proven. "Proven" is the
+        # two-tier split's ProofLedger-backed classification (finding_is_proven)
+        # — NOT a weaponization proven_exploits SUBSTRING match, which was a
+        # forgeable re-entry point for the false-victory chain. A weaponization
+        # proof now carries a resolvable proof token, so it is already in
+        # proven_vulns; the identity check below covers it.
         for f in findings:
             sev = f.get("severity", "info").lower()
             if sev in ["high", "critical"]:
-                # If it's a dynamic vulnerability and we couldn't prove it,
-                # demote it.
                 detail = str(f.get("detail", "")).lower()
                 f_type = str(f.get("type", "")).lower()
 
-                has_proof = False
-                for sig in proven_signatures:
-                    if sig and (sig in detail or sig in f_type):
-                        has_proof = True
-                        break
-
-                # Never demote a finding the two-tier split already classified as
-                # PROVEN (confirmed_vulnerability / vuln_proven / cred / shell from
-                # the WS4 evidence gate / WS3 authz differential). Those are proven
-                # INDEPENDENTLY of weaponization's proven_exploits list, so demoting
-                # them here would under-report their real severity in the verdict
-                # and executive summary.
-                if any(f is pf for pf in proven_vulns):
-                    has_proof = True
+                has_proof = any(f is pf for pf in proven_vulns)
 
                 # Allow known CVE signatures and discovery findings to remain
                 # high
@@ -360,9 +341,14 @@ class ReportingAgent(BaseAgent):
             info("\n[AUTO-UPGRADE] Starting system learning phase...")
 
             upgrader = AutoUpgrader(store=self.store)
+            # P3-5: dry-run. Even if flipped, the TruthGate inside _validate_changes
+            # fails closed unless the change set is backed by non-regressing proven
+            # outcomes — so self-upgrade can no longer corrupt itself on unproven
+            # ("it ran") signals. Application re-opens once a cross-engagement
+            # proven-outcome ledger feeds AutoUpgrader._proven_outcomes.
             upgrade_result = upgrader.run_system_upgrade(
                 engagement_id=self.session.engagement_id,
-                dry_run=False  # Apply changes (not dry run)
+                dry_run=True
             )
 
             if upgrade_result.get("status") == "complete":
@@ -426,13 +412,33 @@ class ReportingAgent(BaseAgent):
                         logging.getLogger(__name__).debug(
                             f'Swallowed exception in reporting_agent.py: {_e}')
 
-            # Collect tool execution data from all phases
-            for phase in ["recon", "exploitation", "persistence"]:
-                phase_data = self.store.get_phase_data(
-                    self.session.engagement_id, phase) or {}
-                if "tool_runs" in phase_data:
-                    engagement_data["tool_runs"].extend(
-                        phase_data["tool_runs"])
+            # P3-3 (WAFLEARN-BATCH-DEAD): feed the batch learner from the tool_runs
+            # TABLE, which carries the persisted `evasion_applied` key — the
+            # phase-data blob does NOT, so the old feed keyed every run as "none"
+            # and the batch pass learned nothing. Derive `success` from status so
+            # _analyze_tactic_effectiveness can credit the tactic that got through.
+            try:
+                from core.result_contracts import ResultStatus as _RS
+                _clean = {_RS.SUCCESS.value, "success", "partial_success"}
+                for _v in ("FALLBACK_SUCCESS", "NO_FINDINGS"):
+                    if hasattr(_RS, _v):
+                        _clean.add(getattr(_RS, _v).value)
+                _clean.discard("no_findings")  # a clean run with no findings isn't a WAF-tactic success
+                for _tr in (self.store.get_tool_runs(self.session.engagement_id) or []):
+                    engagement_data["tool_runs"].append({
+                        **_tr,
+                        "success": str(_tr.get("status", "")).strip().lower() in _clean,
+                    })
+            except Exception as _tr_err:
+                import logging as _lg
+                _lg.getLogger(__name__).debug(
+                    f"tool_runs batch feed failed (non-fatal): {_tr_err}")
+                # Fall back to the phase-data blobs (no evasion key, but non-fatal).
+                for phase in ["recon", "exploitation", "persistence"]:
+                    phase_data = self.store.get_phase_data(
+                        self.session.engagement_id, phase) or {}
+                    if "tool_runs" in phase_data:
+                        engagement_data["tool_runs"].extend(phase_data["tool_runs"])
 
             # Run learning if we have WAF data
             if engagement_data.get("waf_fingerprint"):
@@ -610,22 +616,27 @@ class ReportingAgent(BaseAgent):
     # ── WS7 helpers ─────────────────────────────────────────────────────────
 
     def _split_two_tier(self, findings: list) -> tuple[list, list]:
-        """W7.1 — separate PROVEN vulnerabilities from unverified leads.
+        """W7.1 / P0-8 — separate PROVEN vulnerabilities from unverified leads.
 
-        Proven = a `confirmed_vulnerability` finding (these only exist after the
-        WS4 evidence gate / WS3 authz differential). Everything else is a lead,
-        regardless of the severity a scanner stamped on it.
+        Proven = the finding carries a ``[proof:<id>]`` token that resolves in
+        the ProofLedger and RE-MEASURES as proven (finding_is_proven). A finding
+        TYPE (``confirmed_vulnerability``) or a ``vuln_proven`` SUBSTRING no
+        longer counts — those were REPORT-SPLIT-SUBSTR, the last laundering step
+        of the false-victory chain that produced false "COMPROMISED — N proven"
+        reports. Genuine ACCESS findings (creds/shell) count on their own working
+        artifact. Closes REPORT-SPLIT-SUBSTR / REPORT-1.
         """
+        from core.proof import finding_is_proven
+        ledger = getattr(self, "_proof_ledger", None)
+        _access_types = (
+            "valid_credential", "rce_confirmed", "shell_access", "initial_access")
         proven, leads = [], []
         for f in findings:
             ftype = str(f.get("type", "") or f.get("finding_type", "")).lower()
             detail = str(f.get("detail", "")).lower()
-            is_proven = (
-                ftype == "confirmed_vulnerability"
-                or "vuln_proven" in detail
-                or ftype in ("valid_credential", "rce_confirmed", "shell_access"))
-            # An "unverified lead" tag (from the ops-sanity backstop / evidence
-            # gate) forces it to the lead tier even if mis-typed.
+            is_proven = finding_is_proven(f, ledger) or ftype in _access_types
+            # An explicit "unverified lead" / demoted tag always forces the lead
+            # tier, even for an access type.
             if "unverified lead" in detail or "[demoted" in detail:
                 is_proven = False
             (proven if is_proven else leads).append(f)

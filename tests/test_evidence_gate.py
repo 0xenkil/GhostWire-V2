@@ -28,13 +28,21 @@ _HYP = {"vuln_class": "sqli", "title": "blind sqli in id", "location": "/api?id=
 class TestEvidenceContract:
     def test_is_proven_semantics(self):
         assert not Evidence(proof_type="none").is_proven()
-        assert Evidence(proof_type="artifact").is_proven()
-        assert Evidence(proof_type="oob").is_proven()
+        # P0-1: proof_type alone no longer proves anything — each type needs its
+        # persisted measurement (closes EVIDENCE-ISPROVEN-FORGEABLE).
+        assert not Evidence(proof_type="artifact").is_proven()
+        assert Evidence(proof_type="artifact", control_absent=True,
+                        test_present=True).is_proven()
+        assert not Evidence(proof_type="oob").is_proven()
+        assert Evidence(proof_type="oob", oob_token="abc123.oob.example").is_proven()
         assert Evidence(proof_type="differential", differential="500 vs 200",
                         similarity_to_baseline=0.3).is_proven()
         assert not Evidence(proof_type="differential", differential="x",
                             similarity_to_baseline=0.99).is_proven()
         assert not Evidence(proof_type="differential", differential="").is_proven()
+        # Unmeasured differential (-1.0 sentinel) is a LEAD, not proof.
+        assert not Evidence(proof_type="differential", differential="claimed",
+                            similarity_to_baseline=-1.0).is_proven()
 
 
 class TestMandatoryDifferential:

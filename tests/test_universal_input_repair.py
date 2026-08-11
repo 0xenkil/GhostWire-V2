@@ -45,7 +45,146 @@ def _tm(existing=None, hosts=("api.novalink.lk", "project242.novalink.lk")):
     tm.store = _Store(list(hosts))
     tm.session = _Sess()
     tm.validate_and_filter_flags = lambda c, t: c
+    tm._help_brief_cache = {}
+    tm._valid_flags_cache = {}
     return tm
+
+
+def _tm_local(hosts=("api.novalink.lk",)):
+    """A ToolManager with NO remote executor — the native-Linux-VPS case where
+    tools run locally. This is the config that silently skipped ALL command repair
+    (the {WORDLIST}/missing-path bugs found on the live VM)."""
+    tm = ToolManager.__new__(ToolManager)
+    tm.remote = None
+    tm.store = _Store(list(hosts))
+    tm.session = _Sess()
+    tm.validate_and_filter_flags = lambda c, t: c
+    tm._help_brief_cache = {}
+    tm._valid_flags_cache = {}
+    return tm
+
+
+class TestLocalModeRepair:
+    def test_wordlist_placeholder_substituted_locally(self):
+        # The literal {WORDLIST} must be resolved to a REAL local file even with
+        # no remote executor (was skipped → gobuster ran with literal {WORDLIST}).
+        import os
+        tm = _tm_local()
+        wl = tm._canonical_wordlist()
+        assert wl and os.path.exists(wl) and os.path.getsize(wl) > 0
+        out = tm._validate_and_fix_command(
+            "gobuster dir -u http://novalink.lk -w {WORDLIST}", "gobuster")
+        assert "{WORDLIST}" not in out
+        # Substituted with a real resolved wordlist. Assert the basename (the full
+        # path is backslash-mangled by shlex only on Windows; on the Linux VPS the
+        # forward-slash path survives intact).
+        assert os.path.basename(wl) in out
+
+    def test_missing_wordlist_path_fixed_locally(self):
+        tm = _tm_local()
+        out = tm._validate_and_fix_command(
+            "ffuf -u http://t/FUZZ -w /usr/share/wordlists/dirb/common.txt", "ffuf")
+        # The nonexistent dirb path is redirected to a real local wordlist.
+        assert "/usr/share/wordlists/dirb/common.txt" not in out
+
+    def test_canonical_wordlist_returns_real_local_file(self):
+        tm = _tm_local()
+        wl = tm._canonical_wordlist()
+        import os
+        assert wl and os.path.exists(wl)
+
+    def test_exec_on_host_delegates_to_remote_when_present(self):
+        # The generic host-exec seam uses the remote executor when wired...
+        tm = _tm(existing=[])
+        tm.remote = _Remote([])
+        ec, out, err = tm._exec_on_host("echo $HOME")
+        assert ec == 0 and out == "/home/en"
+
+    def test_exec_on_host_runs_locally_without_remote(self):
+        # ...and falls back to a LOCAL subprocess (no remote) — returning a 3-tuple,
+        # never raising. This is what lets grounding fetch `--help` for ANY tool on
+        # a native VPS (generic, not per-tool).
+        tm = _tm_local()
+        res = tm._exec_on_host("echo hello_local")
+        assert isinstance(res, tuple) and len(res) == 3
+
+    def test_repair_loop_no_crash_when_remote_is_none(self):
+        # REGRESSION (found by the live heavy-tool harness): the path-detection
+        # loop in _validate_and_fix_command called self.remote.execute directly
+        # (echo $HOME / test -e / find) — AttributeError('NoneType' has no
+        # 'execute') on a native-local host. It must now route through
+        # _exec_on_host / _path_exists and never raise. Stub the host-exec seam
+        # so the find-fallback returns instantly (no real 30s filesystem scan)
+        # and to PROVE the loop uses the seam, not raw self.remote.
+        tm = _tm_local()
+        seen = []
+        tm._exec_on_host = lambda c, timeout=15: (seen.append(c) or (1, "", ""))
+        out = tm._validate_and_fix_command(
+            "httpx -l /home/x/live_subdomains.txt -silent", "httpx")
+        assert isinstance(out, str) and "httpx" in out   # did not raise
+
+    def test_ensure_output_dirs_mkdirs_parent(self):
+        # REGRESSION (live novalink.lk run): tools that WRITE results (gau --o,
+        # nmap -oN, ffuf -o) abort when the output DIRECTORY is absent on a
+        # native-local host. _ensure_output_dirs mkdir -p's it, tool-agnostically.
+        tm = _tm_local()
+        seen = []
+        tm._exec_on_host = lambda c, timeout=15: (seen.append(c) or (0, "", ""))
+        for cmd in (
+            "gau novalink.lk --o /home/x/ws/eng1/results/urls.txt",
+            "nmap -sV -oN /home/x/ws/eng1/results/scan.txt t",
+            "ffuf -u http://t/FUZZ -w /tmp/w.txt -o /home/x/ws/eng1/out/ffuf.json",
+        ):
+            tm._ensure_output_dirs(cmd)
+        mk = " ".join(c for c in seen if c.startswith("mkdir -p"))
+        assert "/home/x/ws/eng1/results" in mk
+        assert "/home/x/ws/eng1/out" in mk
+
+    def test_output_dir_created_via_validate_for_nmap(self):
+        # -oN is recognised by the repair loop (path left intact); the final
+        # command's output dir must then be created before the tool runs.
+        tm = _tm_local()
+        seen = []
+        tm._exec_on_host = lambda c, timeout=15: (seen.append(c) or (0, "", ""))
+        out = tm._validate_and_fix_command(
+            "nmap -sV -oN /home/x/ws/eng1/results/scan.txt novalink.lk", "nmap")
+        assert "scan.txt" in out
+        assert any(c.startswith("mkdir -p") and "/home/x/ws/eng1/results" in c
+                   for c in seen)
+
+    def test_leading_tilde_expanded_in_output_path(self):
+        # REGRESSION (live novalink.lk run): gau/masscan/whatweb got a quoted
+        # '~/redteam-workspace/...' output path and aborted — the tool receives a
+        # LITERAL ~ the shell never expanded. _expand_home_tokens must rewrite it
+        # to the host's absolute home before the tool runs.
+        tm = _tm_local()
+        tm._exec_on_host = lambda c, timeout=15: (0, "/home/ubuntu", "")
+        out = tm._validate_and_fix_command(
+            "gau --subs novalink.lk --o ~/redteam-workspace/eng1/results/u.txt", "gau")
+        assert "~/redteam-workspace" not in out
+        assert "/home/ubuntu/redteam-workspace/eng1/results/u.txt" in out
+
+    def test_tilde_glued_flag_expanded(self):
+        tm = _tm_local()
+        tm._exec_on_host = lambda c, timeout=15: (0, "/home/ubuntu", "")
+        out = tm._validate_and_fix_command(
+            "whatweb -v http://t '--log-verbose=~/redteam-workspace/e1/r/w.txt'", "whatweb")
+        assert "~/" not in out
+        assert "--log-verbose=/home/ubuntu/redteam-workspace/e1/r/w.txt" in out
+
+    def test_help_brief_grounds_without_remote(self):
+        # REGRESSION: get_tool_help_brief early-returned "" when self.remote was
+        # None, silently disabling ALL help-grounding on the native-VPS config
+        # this engine actually runs in. It must fetch via _exec_on_host instead.
+        tm = _tm_local()
+        tm._exec_on_host = lambda c, timeout=15: (
+            0,
+            "Usage: mytool [options]\n  -u, --url string   target URL\n"
+            "  -w, --wordlist string  wordlist file\n  -o string  output file\n"
+            "  --silent  quiet mode\n  -mc string  match status codes\n",
+            "")
+        brief = tm.get_tool_help_brief("mytool")
+        assert brief and "url" in brief.lower()
 
 
 class TestCanonicalHostsFile:

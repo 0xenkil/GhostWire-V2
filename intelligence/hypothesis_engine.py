@@ -305,7 +305,7 @@ A "confirmed" with proof_type "none" is INVALID — if you cannot name the proof
                 self._response_similarity(stdout or "", baseline or "")
                 if (baseline or "").strip() else -1.0)
             evidence_obj = self._build_evidence(
-                proof_type, command, stdout, baseline, differential, measured_sim)
+                proof_type, command, stdout, baseline, differential, measured_sim, verdict)
             if not evidence_obj.is_proven():
                 if self.log:
                     self.log.info(
@@ -333,9 +333,36 @@ A "confirmed" with proof_type "none" is INVALID — if you cannot name the proof
                 "severity": sev, "proof_type": proof_type, "refinement": refinement}
 
     def _build_evidence(self, proof_type: str, command: str, stdout: str,
-                        baseline: str, differential: str, similarity: float):
-        """Assemble the structured Evidence object for a verdict (WS4)."""
+                        baseline: str, differential: str, similarity: float,
+                        verdict: dict | None = None):
+        """Assemble the structured Evidence object for a verdict (WS4).
+
+        P0-1: for artifact/oob the proof must be MEASURED, not merely asserted by
+        the AI's ``proof_type``. Artifact reflection is measured against the
+        response/baseline the gate already holds — the proving excerpt must be
+        PRESENT in the test response and ABSENT from the control — and OOB carries
+        the unique token that was actually observed. An AI that only *claims*
+        proof_type='artifact'/'oob' with no such measurement fails is_proven and
+        is downgraded to a lead, closing the assertion-as-proof forgery.
+        """
         from core.result_contracts import Evidence
+        verdict = verdict or {}
+        art_absent = False
+        art_present = False
+        oob_token = ""
+        if proof_type == "artifact":
+            excerpt = str(
+                verdict.get("artifact_excerpt")
+                or verdict.get("artifact_locator")
+                or verdict.get("evidence") or "").strip()
+            # Require a non-trivial excerpt so a proof can't ride on empty/short
+            # noise that would coincidentally match.
+            if len(excerpt) >= 6:
+                art_present = excerpt in (stdout or "")
+                art_absent = excerpt not in (baseline or "")
+        elif proof_type == "oob":
+            oob_token = str(
+                verdict.get("oob_token") or verdict.get("oob_interaction") or "").strip()
         return Evidence(
             proof_type=proof_type,
             reproducible_command=command or "",
@@ -344,6 +371,9 @@ A "confirmed" with proof_type "none" is INVALID — if you cannot name the proof
             baseline_excerpt=(baseline or "")[:1000],
             differential=differential or "",
             similarity_to_baseline=similarity,
+            control_absent=art_absent,
+            test_present=art_present,
+            oob_token=oob_token,
             notes="",
         )
 

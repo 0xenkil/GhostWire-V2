@@ -26,6 +26,8 @@ class OutputParser:
                 "sqlmap": self._sqlmap,
                 "nuclei": self._nuclei,
                 "wafw00f": self._wafw00f,
+                "httpx": self._httpx,
+                "whatweb": self._whatweb,
             }
             parser_fn = parsers.get(tool, self._generic)
             return parser_fn(stdout, stderr)
@@ -37,14 +39,22 @@ class OutputParser:
         open_ports = []
         services = {}
 
-        # Use finditer to tolerate fused lines
+        # Use finditer to tolerate fused lines.
+        # PARSER-3: the service field is now OPTIONAL — a port line with no
+        # service column (`22/tcp open`) is no longer silently dropped — and
+        # the service token allows `/` so a slashed service (`ssl/http`) is
+        # captured whole instead of truncated to `ssl`. `\b` after the state
+        # keeps it from matching `open` inside a fused word.
+        # Intra-line separators are horizontal-only ([ \t]+, never \s+): a
+        # \s+ would match the newline and let one port's optional version field
+        # swallow the *next* line's port entry, dropping it from the scan.
         for m in re.finditer(
-                r'(\d+)/(tcp|udp)\s+(open|filtered|closed)\s+([\w.-]+)(?:\s+([^/\n]+))?', stdout):
+                r'(\d+)/(tcp|udp)[ \t]+(open|filtered|closed)\b(?:[ \t]+([\w./+-]+))?(?:[ \t]+([^\n\r]+))?', stdout):
             port_info = {
                 "port": int(m.group(1)),
                 "protocol": m.group(2),
                 "state": m.group(3),
-                "service": m.group(4),
+                "service": m.group(4) or "",
                 "version": m.group(5).strip() if m.group(5) else ""
             }
             if m.group(3) == "open":
@@ -273,6 +283,128 @@ class OutputParser:
                 if m:
                     waf_name = m.group(1).strip()
         return {"is_behind_waf": is_behind_waf, "waf_name": waf_name}
+
+    def _httpx(self, stdout, stderr) -> dict:
+        """PARSER-1: httpx says WHICH hosts are live and with what status/title/
+        tech. `_generic` kept only URLs and threw away the live/dead verdict —
+        the exact signal that separates a real web server from a dead name.
+
+        Handles both httpx `-json` output and the default bracketed line format
+        (`https://host [200] [Title] [nginx,PHP]`). ANSI colour has already been
+        stripped by clean_text upstream."""
+        live_hosts = []
+        probes = []
+        technologies = []
+        seen = set()
+        decoder = json.JSONDecoder()
+
+        for raw in (stdout or "").splitlines():
+            line = raw.strip()
+            if not line:
+                continue
+
+            data = None
+            if line.startswith("{"):
+                try:
+                    data, _ = decoder.raw_decode(line)
+                except Exception:
+                    data = None
+
+            if isinstance(data, dict):
+                url = data.get("url") or data.get("input") or data.get("host") or ""
+                status = data.get("status_code") or data.get("status-code")
+                title = data.get("title", "")
+                tech = data.get("tech") or data.get("technologies") or []
+                if isinstance(tech, str):
+                    tech = [tech]
+            else:
+                # Bracketed text format: URL followed by [ ... ] groups.
+                um = re.match(r'(https?://\S+)', line)
+                if not um:
+                    continue
+                url = um.group(1)
+                brackets = re.findall(r'\[([^\]]*)\]', line)
+                status = None
+                title = ""
+                tech = []
+                if brackets:
+                    # First bracket is the status code(s), e.g. [200] or [301,200]
+                    sm = re.search(r'\d{3}', brackets[0])
+                    if sm:
+                        status = int(sm.group(0))
+                    # Remaining brackets: title / tech tags (order tool-dependent)
+                    for b in brackets[1:]:
+                        b = b.strip()
+                        if not b:
+                            continue
+                        if ',' in b or re.search(r'[A-Za-z]', b):
+                            tech.extend(t.strip() for t in b.split(',') if t.strip())
+                    if tech and not title:
+                        title = ""
+
+            if not url or url in seen:
+                continue
+            seen.add(url)
+            live_hosts.append(url)
+            probes.append({
+                "url": url,
+                "status": status,
+                "title": title,
+                "tech": tech,
+            })
+            for t in tech:
+                if t and t not in technologies:
+                    technologies.append(t)
+
+        return {
+            "live_hosts": live_hosts,
+            "http_probes": probes,
+            "technologies": technologies,
+            "count": len(live_hosts),
+        }
+
+    def _whatweb(self, stdout, stderr) -> dict:
+        """PARSER-1: whatweb emits tech-stack tags (`HTTPServer[nginx]`,
+        `Title[...]`), not URLs, so `_generic` extracted essentially nothing and
+        the fingerprint that drives wordlist/tech-aware decisions was dropped.
+
+        Each `Name[value]` becomes a technology; HTTPServer/Title/IP are also
+        surfaced explicitly."""
+        technologies = []
+        http_server = None
+        title = None
+        ip = None
+        targets = []
+
+        for raw in (stdout or "").splitlines():
+            line = raw.strip()
+            if not line:
+                continue
+            tm = re.match(r'(https?://\S+)', line)
+            if tm:
+                targets.append(tm.group(1))
+            for m in re.finditer(r'([A-Za-z][\w\-]*)\[([^\]]*)\]', line):
+                name = m.group(1).strip()
+                val = m.group(2).strip()
+                tag = f"{name}[{val}]" if val else name
+                if tag not in technologies:
+                    technologies.append(tag)
+                low = name.lower()
+                if low == "httpserver" and not http_server:
+                    http_server = val
+                elif low == "title" and not title:
+                    title = val
+                elif low == "ip" and not ip:
+                    ip = val
+
+        return {
+            "technologies": technologies,
+            "http_server": http_server,
+            "title": title,
+            "ip": ip,
+            "targets": targets,
+            "count": len(technologies),
+        }
 
     def _generic(self, stdout, stderr) -> dict:
         # Extract URLs and parameter names so crawler / param-discovery tools

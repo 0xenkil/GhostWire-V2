@@ -1,25 +1,43 @@
-from collections import defaultdict
+from collections import defaultdict, deque
 from threading import Lock
 from typing import Callable
 from utils.logger import get_logger
 
 log = get_logger("message_bus")
 
+# P5-9 (BUS-1): per-channel bounded replay buffer so a subscriber that attaches
+# AFTER an event was published still receives it. Bounded (drops OLDEST, keeps
+# newest); ephemeral reply_* channels are NOT buffered (unique per request).
+_REPLAY_BUFFER_PER_CHANNEL = 50
+
 
 class MessageBus:
     def __init__(self, state_store, engagement_id: str):
         self._subscribers: dict[str, list[Callable]] = defaultdict(list)
+        self._buffer: dict[str, deque] = defaultdict(
+            lambda: deque(maxlen=_REPLAY_BUFFER_PER_CHANNEL))
         self._lock = Lock()
         self._store = state_store
         self._engagement_id = engagement_id
 
-    def subscribe(self, channel: str, handler: Callable):
+    def subscribe(self, channel: str, handler: Callable, replay: bool = True):
+        """Register a handler. P5-9: by default REPLAY the channel's buffered past
+        events to this handler so a late subscriber isn't blind to what already
+        happened. Replay runs OUTSIDE the lock (a handler may re-enter the bus)."""
         with self._lock:
             self._subscribers[channel].append(handler)
+            buffered = list(self._buffer.get(channel, ())) if replay else []
+        for from_agent, payload in buffered:
+            try:
+                handler(from_agent, payload)
+            except Exception as e:
+                log.error(
+                    f"Replay to late subscriber on '{channel}' failed: {e}")
 
     def publish(self, from_agent: str, channel: str, payload: dict):
         """
-        Publish a message. All subscribers on that channel receive it.
+        Publish a message. All subscribers on that channel receive it — plus any
+        FUTURE late subscriber, via the bounded replay buffer (P5-9).
         Also logs to state store for audit trail.
         """
         import json
@@ -29,6 +47,9 @@ class MessageBus:
             self._engagement_id, from_agent, channel, content
         )
         with self._lock:
+            # Buffer for late subscribers (bounded). Skip ephemeral reply channels.
+            if not channel.startswith("reply_"):
+                self._buffer[channel].append((from_agent, payload))
             handlers = list(self._subscribers.get(channel, []))
         for handler in handlers:
             try:
@@ -69,8 +90,8 @@ class MessageBus:
                         handlers.remove(on_reply)
                         self._subscribers[reply_channel] = handlers
 
-        # Register temporary reply handler
-        self.subscribe(reply_channel, on_reply)
+        # Register temporary reply handler (no replay — ephemeral channel).
+        self.subscribe(reply_channel, on_reply, replay=False)
         payload["_reply_to"] = reply_channel
         # Publish the request
         self.publish(from_agent, to_agent, payload)

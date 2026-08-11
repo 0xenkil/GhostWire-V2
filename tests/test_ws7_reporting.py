@@ -33,21 +33,38 @@ def _agent(tmp_path, kv=None):
 
 class TestTwoTier:
     def test_split_proven_vs_leads(self, tmp_path):
-        a = _agent(tmp_path)
-        findings = [
-            {"type": "confirmed_vulnerability", "severity": "high",
-             "detail": "VULN_PROVEN [IDOR] /api/orders/124"},
-            {"type": "exploit_lead", "severity": "info", "detail": "generic db keyword"},
-            {"type": "waf_detected", "severity": "high",
-             "detail": "[UNVERIFIED LEAD — ops-sanity: ...] maybe waf"},
-            {"type": "open_port", "severity": "medium", "detail": "443 open"},
-        ]
-        proven, leads = a._split_two_tier(findings)
-        assert len(proven) == 1
-        assert proven[0]["type"] == "confirmed_vulnerability"
-        # the high-sev unverified-lead-tagged finding must NOT be proven
-        assert all("unverified lead" not in str(p.get("detail", "")).lower() for p in proven)
-        assert len(leads) == 3
+        # P0-8: proven = a resolvable ProofLedger token, NOT a finding type or a
+        # "VULN_PROVEN" substring (that was REPORT-SPLIT-SUBSTR).
+        from core.state_store import StateStore
+        from core.proof import ProofLedger, ProofContext
+        store = StateStore(":memory:")
+        try:
+            ledger = ProofLedger(store, "eng_test")
+            eid = ledger.stamp("differential", ProofContext(
+                control_response="the owner's own order page body",
+                test_response="a DIFFERENT user's order 124 body",
+                command="GET /api/orders/124"))
+            assert eid
+            a = _agent(tmp_path)
+            a._proof_ledger = ledger
+            findings = [
+                {"type": "confirmed_vulnerability", "severity": "high",
+                 "detail": f"[proof:{eid}] VULN_PROVEN [IDOR] /api/orders/124"},
+                {"type": "exploit_lead", "severity": "info", "detail": "generic db keyword"},
+                {"type": "waf_detected", "severity": "high",
+                 "detail": "[UNVERIFIED LEAD — ops-sanity: ...] maybe waf"},
+                {"type": "open_port", "severity": "medium", "detail": "443 open"},
+                # substring-only "proof" with NO token must now be a LEAD
+                {"type": "confirmed_vulnerability", "severity": "critical",
+                 "detail": "VULN_PROVEN [RCE] trust me — no proof token"},
+            ]
+            proven, leads = a._split_two_tier(findings)
+            assert len(proven) == 1
+            assert "[proof:" in proven[0]["detail"]
+            assert all("unverified lead" not in str(p.get("detail", "")).lower() for p in proven)
+            assert len(leads) == 4
+        finally:
+            store.close()
 
 
 class TestVerdict:

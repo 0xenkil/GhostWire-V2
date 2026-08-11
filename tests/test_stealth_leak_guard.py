@@ -21,13 +21,22 @@ def _fake(stealth, tor_verified=None):
     rot = None
     if tor_verified is not None:
         rot = types.SimpleNamespace(_tor_verified=tor_verified)
-    return types.SimpleNamespace(
+    f = types.SimpleNamespace(
         _stealth=stealth,
         _ip_rotator=rot,
+        # P4-5: the guard now reads these shared class constants + the widened
+        # _stealth_requested() trigger; supply them on the minimal fake `self`.
         _STEALTH_LOCAL_TOOLS=BaseAgent._STEALTH_LOCAL_TOOLS,
+        _STEALTH_RAW_SOCKET_TOOLS=BaseAgent._STEALTH_RAW_SOCKET_TOOLS,
+        _STEALTH_ANONYMITY_KEYS=BaseAgent._STEALTH_ANONYMITY_KEYS,
         log=types.SimpleNamespace(error=lambda *a, **k: None,
                                   debug=lambda *a, **k: None),
     )
+    f._stealth_requested = types.MethodType(BaseAgent._stealth_requested, f)
+    # P2-1: the raw-socket check now consults the ToolCatalog tag (bind the real
+    # method; it falls back to _STEALTH_RAW_SOCKET_TOOLS supplied above).
+    f._is_raw_socket_tool = types.MethodType(BaseAgent._is_raw_socket_tool, f)
+    return f
 
 
 def test_no_anonymity_requested_allows():

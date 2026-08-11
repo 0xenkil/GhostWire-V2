@@ -1,7 +1,23 @@
 #!/usr/bin/env python3
 """
 GHOSTWIRE V7 — Autonomous Pentest Engine
+
+Requires Python 3.12+ (the codebase uses PEP 701 multi-line f-strings, which are
+a SyntaxError on 3.11 and earlier). The guard below is written in 3.10-safe syntax
+and runs BEFORE any project import so an old interpreter gets a clear message
+instead of a cryptic 'unterminated string literal' from a deep module. Verified
+on the target VPS: Ubuntu 22.04 ships 3.10 — install 3.12 (deadsnakes) first.
 """
+import sys as _sys
+
+if _sys.version_info < (3, 12):
+    _sys.exit(
+        "GhostWire requires Python 3.12+ (found %d.%d). The engine uses PEP 701 "
+        "f-strings unavailable on older interpreters. On Ubuntu 22.04/Debian: "
+        "`sudo add-apt-repository ppa:deadsnakes/ppa && sudo apt install "
+        "python3.12 python3.12-venv`, then recreate the venv with python3.12."
+        % (_sys.version_info[0], _sys.version_info[1]))
+
 from core.ai_backend import AIBackend
 from config_backends import USE_WSL, WSL_DISTRO, validate_endpoints, SHODAN_API_KEY, SECURITYTRAILS_API_KEY, VIRUSTOTAL_API_KEY
 from config import REQUIRE_WRITTEN_CONSENT
@@ -167,8 +183,7 @@ def get_ai_choice() -> str:
 
     oll_status = f"[bold {C_SUCCESS}]ONLINE[/]" if "ollama" in available else f"[bold {C_DIM}]OFFLINE[/]"
     cloud_items = [x.title() for x in ["groq", "google"] if x in available]
-    cloud_status = f"[bold {C_SUCCESS}]ONLINE[/] ({
-        ', '.join(cloud_items)})" if cloud_items else f"[bold {C_DANGER}]NO KEYS[/]"
+    cloud_status = f"[bold {C_SUCCESS}]ONLINE[/] ({', '.join(cloud_items)})" if cloud_items else f"[bold {C_DANGER}]NO KEYS[/]"
 
     console.print(
         f"  [bold {C_ACCENT}]◆[/]  [bold white]Assign AI Cognitive Orchestrator[/]")
@@ -265,8 +280,7 @@ def pre_flight_checks(auto_confirm: bool = False) -> bool:
     is_linux = platform.system() != "Windows" or USE_WSL
     status_label = ""
     if platform.system() == "Windows":
-        status_label = f"WSL ({
-            WSL_DISTRO or 'Ubuntu'})" if USE_WSL else "Windows (Degraded)"
+        status_label = f"WSL ({WSL_DISTRO or 'Ubuntu'})" if USE_WSL else "Windows (Degraded)"
     preflight_check("Platform Environment", status_label, is_linux)
 
     # WSL functional check if platform is Windows and USE_WSL is set
@@ -283,11 +297,9 @@ def pre_flight_checks(auto_confirm: bool = False) -> bool:
                 "WSL is not responsive or VM virtualization is disabled in Windows BIOS/features.")
 
     # Python
-    py_ok = sys.version_info >= (3, 10)
+    py_ok = sys.version_info >= (3, 12)
     preflight_check(
-        "Python Runtime Execution", f"{
-            sys.version_info.major}.{
-            sys.version_info.minor}", py_ok)
+        "Python Runtime Execution", f"{sys.version_info.major}.{sys.version_info.minor}", py_ok)
 
     # AI
     detector = AIBackend()
@@ -321,8 +333,7 @@ def pre_flight_checks(auto_confirm: bool = False) -> bool:
             ok = k["status"] in ("ONLINE", "QUERYABLE")
             err = k.get("error", "")
             preflight_check(
-                f"Groq API Key Pool ({
-                    k['key']})",
+                f"Groq API Key Pool ({k['key']})",
                 err if not ok else "ACTIVE",
                 ok)
 

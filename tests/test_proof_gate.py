@@ -34,14 +34,24 @@ def _verdict(payload, stdout=_BASE, baseline=_BASE):
 
 
 def test_artifact_proof_confirms_even_if_response_matches_baseline():
+    # P0-1: the artifact (SQL error) sits INSIDE an otherwise-near-identical
+    # page — PRESENT in the test response, ABSENT from the baseline: a *measured*
+    # artifact proof, not a bare proof_type claim.
+    art_stdout = "<html>normal page content here SQL syntax error near ')'</html>"
     assert _verdict({"verdict": "confirmed", "proof_type": "artifact",
-                     "evidence": "SQL syntax error near ...", "differential": "",
-                     "severity": "high", "confidence": 0.9}) == "confirmed"
+                     "evidence": "SQL syntax error near ')'",
+                     "artifact_excerpt": "SQL syntax error near ')'",
+                     "differential": "", "severity": "high", "confidence": 0.9},
+                    stdout=art_stdout, baseline=_BASE) == "confirmed"
 
 
 def test_oob_proof_confirms_even_if_response_matches_baseline():
+    # P0-1: OOB proof is out-of-band — response similarity is irrelevant — but it
+    # must carry the unique token that was actually observed on the collaborator,
+    # not merely a claim that a callback happened.
     assert _verdict({"verdict": "confirmed", "proof_type": "oob",
                      "evidence": "DNS callback received on collaborator",
+                     "oob_token": "a1b2c3.oob.example.net",
                      "differential": "", "severity": "critical",
                      "confidence": 0.95}) == "confirmed"
 

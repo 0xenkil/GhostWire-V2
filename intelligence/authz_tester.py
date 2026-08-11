@@ -33,6 +33,11 @@ class AuthzResult:
     proof_type: str = "none"      # "differential" when proven
     control: dict = field(default_factory=dict)
     test: dict = field(default_factory=dict)
+    # P0-5: the measured control/test bodies (truncated) so the ProofLedger can
+    # RE-MEASURE the cross-identity differential and stamp a real proof token,
+    # rather than the emitter asserting "VULN_PROVEN".
+    control_body: str = ""
+    test_body: str = ""
     notes: str = ""
 
     def to_dict(self) -> dict:
@@ -106,6 +111,8 @@ class AuthzTester:
             res.confirmed = True
             res.proof_type = "differential"
             res.severity = "high"
+            res.control_body = control["body"]
+            res.test_body = test["body"]
             who = other_session.identity_label if other_session else "anonymous"
             res.differential = (
                 f"{who} identity received the SAME protected object as the owner "
@@ -151,6 +158,8 @@ class AuthzTester:
                 res.url = nurl
                 res.proof_type = "differential"
                 res.severity = "high"
+                res.control_body = control["body"]
+                res.test_body = test["body"]
                 res.test = {k: test[k] for k in ("status", "len")}
                 res.differential = (
                     f"Neighbour id {nurl} returned a different valid protected object "

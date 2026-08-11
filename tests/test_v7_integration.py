@@ -9,7 +9,6 @@ from agents.exploitation_agent import ExploitationAgent
 from core.stealth_proxy import StealthProxy
 from core.payload_sandbox import validate_script
 from core.state_store import StateStore
-from core.attack_graph import AttackGraph
 import unittest
 import sys
 import os
@@ -155,7 +154,12 @@ class TestV7Integration(unittest.TestCase):
                             f"Swallowed exception: {_e}")
 
     def test_database_schema_v7(self):
-        """1. Verify that SQLite contains the graph tables and schema upgrades from V7.1"""
+        """1. Verify SQLite schema upgrades from V7.1 (core persisted tables).
+
+        P5-8: the graph_nodes/graph_edges assertions were removed with the
+        write-only AttackGraph they backed; assert the durable core tables the
+        engine actually relies on instead (tool_runs, findings, evidence_graph —
+        the LIVE, consumed graph)."""
         conn = sqlite3.connect(str(self.db_path))
         cursor = conn.cursor()
 
@@ -163,44 +167,17 @@ class TestV7Integration(unittest.TestCase):
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
         tables = [row[0] for row in cursor.fetchall()]
 
-        self.assertIn("graph_nodes", tables)
-        self.assertIn("graph_edges", tables)
+        self.assertIn("tool_runs", tables)
+        self.assertIn("findings", tables)
+        self.assertIn("evidence_graph", tables)
 
-        # Check column names for graph_nodes
-        cursor.execute("PRAGMA table_info(graph_nodes);")
+        # tool_runs carries the P0-10 originating-run link + P3-3 evasion column.
+        cursor.execute("PRAGMA table_info(tool_runs);")
         columns = [row[1] for row in cursor.fetchall()]
-        self.assertIn("key", columns)
-        self.assertIn("type", columns)
-        self.assertIn("attributes", columns)
+        self.assertIn("tool", columns)
+        self.assertIn("evasion_applied", columns)
 
         conn.close()
-
-    def test_attack_graph_traversal_and_persistence(self):
-        """2. Verify Attack Graph context traversal and blackboard integration"""
-        graph = AttackGraph(self.store)
-        eng_id = self.session.engagement_id
-
-        # Add a node chain: host1 -> service1 -> host2
-        graph.add_node(eng_id, "192.168.1.1", "host", {})
-        graph.add_node(
-            eng_id, "192.168.1.1:80", "service", {
-                "protocol": "http", "port": 80})
-        graph.add_node(eng_id, "192.168.1.2", "host", {})
-
-        graph.add_edge(eng_id, "192.168.1.1", "192.168.1.1:80", "runs_service")
-        graph.add_edge(eng_id, "192.168.1.1:80", "192.168.1.2", "can_access")
-
-        # In V7, get_filtered_context is hardcoded to depth=2
-        context = graph.get_filtered_context(eng_id, "192.168.1.1")
-        self.assertIn("192.168.1.1", context["nodes"])
-        self.assertIn("192.168.1.1:80", context["nodes"])
-        self.assertIn("192.168.1.2", context["nodes"])
-
-        # Load a separate instance and check it holds the same properties
-        new_graph = AttackGraph(self.store)
-        context2 = new_graph.get_filtered_context(eng_id, "192.168.1.1")
-        self.assertIn("192.168.1.1", context2["nodes"])
-        self.assertIn("192.168.1.2", context2["nodes"])
 
     def test_payload_sandbox_ast_rules(self):
         """3. Validate code compilation gate (AST whitelist blocks bad imports/functions)"""
@@ -302,10 +279,14 @@ class TestV7Integration(unittest.TestCase):
         # Verify the AI backend was consulted and completed the cognitive loop
         self.assertGreaterEqual(dummy_ai.calls, 2)
 
-        # Verify findings were added securely
+        # Verify findings were added securely.
+        # P0-5 (EXPLOIT-EMIT-1): output that merely CONTAINS a sensitive substring
+        # (e.g. "private key") is no longer minted as a proven ai_dynamic_exploit —
+        # with no control/test differential it is an UNVERIFIED LEAD (exploit_lead)
+        # for the hypothesis engine to validate, never a forged proof.
         findings = self.store.get_all_findings(self.session.engagement_id)
         cognitive_findings = [
-            f for f in findings if f["type"] == "ai_dynamic_exploit"]
+            f for f in findings if f["type"] == "exploit_lead"]
         self.assertGreater(len(cognitive_findings), 0)
         self.assertIn("curl http://localhost", cognitive_findings[0]["detail"])
 

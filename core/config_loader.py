@@ -66,11 +66,54 @@ def get_config(config_name: str, key_path: str,
     return val
 
 
+# ── P5-2 (D-CONFIG-1): attribute views over the `config` module ──────────────
+# These replace core/config_manager.py's MockTimeoutConfig / MockVpsConfig /
+# MockConfig VERBATIM (deleted) so the consolidated ConfigManager is the ONE
+# config authority. `config` is imported LAZILY inside each property because
+# config.py imports THIS module at top level — a module-level import here would
+# be a cycle. Precedence is env > YAML > module default: the `config` module
+# constants already resolve env>YAML>default (via get_config()); the getattr
+# fallback is the final module default. NOTE (unchanged from MockConfig):
+# config.py does not define TOOL_DEFAULT_TIMEOUT / TOOL_VERIFY_TIMEOUT /
+# RATE_LIMIT_MAX_BACKOFF, so those resolve to the getattr defaults today.
+class _TimeoutView:
+    @property
+    def rate_limit_initial_backoff(self):
+        import config
+        return getattr(config, "RATE_LIMIT_INITIAL_BACKOFF", 10)
+
+    @property
+    def rate_limit_max_backoff(self):
+        import config
+        return getattr(config, "RATE_LIMIT_MAX_BACKOFF", 60)
+
+    @property
+    def tool_default(self):
+        import config
+        return getattr(config, "TOOL_DEFAULT_TIMEOUT", 300)
+
+    @property
+    def tool_verify(self):
+        import config
+        return getattr(config, "TOOL_VERIFY_TIMEOUT", 30)
+
+
+class _VpsView:
+    @property
+    def use_remote_vps(self):
+        import config
+        return getattr(config, "USE_REMOTE_VPS", False)
+
+
 class ConfigManager:
     """
     FIX #4.1: Unified configuration manager that centralizes all config access.
     Provides backward compatibility while consolidating config files.
     Supports loading from environment variables, YAML files, and Python modules.
+
+    P5-2: also exposes the `.timeout` / `.vps` attribute views formerly served by
+    the retired core.config_manager.MockConfig, so `get_config().vps.use_remote_vps`
+    and `get_config().timeout.tool_default` route through this single manager.
     """
 
     def __init__(self):
@@ -79,6 +122,14 @@ class ConfigManager:
         self._thresholds_config = None
         self._general_config = None
         self._tools_config = None
+
+    @property
+    def timeout(self) -> _TimeoutView:
+        return _TimeoutView()
+
+    @property
+    def vps(self) -> _VpsView:
+        return _VpsView()
 
     def _load_backends_config(self) -> dict:
         """Load AI backends and external service credentials."""

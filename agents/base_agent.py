@@ -23,7 +23,7 @@ from core.ip_rotator import IpRotator
 from core.waf_ghost_engine import WafGhostEngine
 from intelligence.waf_evasion_engine import WafEvasionEngine
 from intelligence.tool_success_tracker import ToolSuccessTracker
-from core.config_manager import get_config
+from core.config_loader import get_config_manager as get_config  # P5-2: one config authority
 import posixpath
 import config_paths
 
@@ -47,7 +47,7 @@ from intelligence.structured_analyzer import StructuredAnalyzer
 from intelligence.reasoning_engine import ReasoningEngine
 from intelligence.strategic_advisor import StrategicAdvisor
 from intelligence.syntax_learner import SyntaxLearner
-from core.attack_graph import AttackGraph
+from core.proof import ProofLedger, ProofContext, finding_is_proven
 
 # ── V6 imports ──
 from core.target_context import TargetContext
@@ -118,7 +118,16 @@ class BaseAgent(ABC):
         self.orchestrator = orchestrator
         self.cap_registry = capability_registry
 
-        self.attack_graph = AttackGraph(self.store)
+        # P0-2/P0-3: the single ProofLedger for this engagement. add_finding
+        # stamps proofs through it; every trust consumer resolves proofs through
+        # finding_is_proven(). It is the ONLY place Evidence is minted.
+        try:
+            self._proof_ledger = ProofLedger(
+                self.store, self.session.engagement_id)
+        except Exception as _ple:
+            self.log = getattr(self, "log", get_logger(f"agent.{name}"))
+            self.log.debug(f"ProofLedger init deferred: {_ple}")
+            self._proof_ledger = None
 
         # ── V6 Agent Communication ──
         self.log = get_logger(f"agent.{name}")
@@ -141,6 +150,15 @@ class BaseAgent(ABC):
         self._tool_ban_list: set[str] = set()
         # tools that have had --help checked
         self._tools_validated: set[str] = set()
+
+        # ── P4-3: enforced convergence breaker (intent ledger) ──
+        # intent_key -> {"attempts": int, "progress_at_gain": int, "stale_streak":
+        # int}. Keyed on the P1-4 _command_intent_key (evasion mutations stripped)
+        # with INTENT-LOCAL progress (findings for this intent's host). Abandons on
+        # MAX consecutive attempts with no NEW finding (staleness since last gain,
+        # not since intent start — an early one-off finding must not grant a doomed
+        # WAF-blocked loop permanent immunity), deterministically with no LLM call.
+        self._intent_ledger: dict[str, dict] = {}
 
         # ── FIX #6: Persistent Repair History ──
         # cmd_hash -> [error1, error2, ...]
@@ -320,21 +338,16 @@ class BaseAgent(ABC):
         self._phase_budget_total = max(1.0, deadline - _t.monotonic())
 
     def _phase_token_budget(self) -> int:
-        """Resolve the token budget for this agent's phase (0 = unlimited)."""
+        """Resolve the token budget for this agent's phase (0 = unlimited).
+
+        P5-7: delegates to the ONE shared resolver (core.llm_backend.
+        phase_token_budget) so the Phase-4 budget authority and any
+        LLMBackend.token_budget() can never drift apart."""
         try:
-            from config_thresholds import (
-                PHASE_TOKEN_BUDGET_RECON,
-                PHASE_TOKEN_BUDGET_EXPLOITATION,
-                PHASE_TOKEN_BUDGET_DEFAULT,
-            )
+            from core.llm_backend import phase_token_budget
+            return phase_token_budget(getattr(self, "name", "") or "")
         except Exception:
             return 0
-        name = (getattr(self, "name", "") or "").lower()
-        if name == "recon":
-            return PHASE_TOKEN_BUDGET_RECON
-        if name == "exploitation":
-            return PHASE_TOKEN_BUDGET_EXPLOITATION
-        return PHASE_TOKEN_BUDGET_DEFAULT
 
     def is_phase_budget_exhausted(self) -> bool:
         """W1.2 circuit breaker — True when this phase has burned its token budget.
@@ -353,6 +366,62 @@ class BaseAgent(ABC):
         except Exception as e:
             self.log.debug(f"Phase budget check failed (non-fatal): {e}")
             return False
+
+    # P4-2 (RC-4 / DEEP-3 / DEEP-10) — token-budget shed points for the self-
+    # correction stack. The LOWEST-VALUE kind sheds earliest as the phase token
+    # budget drains; 'triage' has no entry so it rides to full exhaustion (only
+    # is_phase_budget_exhausted() stops it) because its accept/abandon verdict is
+    # what CURBS further spend. These are budget-policy fractions (one authority),
+    # NOT a per-tool signature table — nothing here keys on a tool name.
+    _LLM_SHED_FRACTIONS = {
+        "grounding": 0.70,
+        "mentor": 0.70,
+        "repair": 0.85,
+    }
+
+    def _afford_llm(self, kind: str) -> bool:
+        """P4-2 — the ONE budget authority for spending an LLM call on self-
+        correction (triage / repair / grounding / mentor). Built ON TOP of the
+        existing is_phase_budget_exhausted(): full exhaustion sheds EVERY kind;
+        below that, the lowest-value kinds shed first per _LLM_SHED_FRACTIONS so a
+        starving phase still spends its last tokens on the highest-value decision
+        (triage's accept/abandon). When this returns False the caller MUST fall
+        through to the deterministic classifiers already in the loop
+        (classify_unrepairable / transport-dead abandon / exit-code backstop) —
+        shedding never strands a result on an LLM it can't afford.
+
+        Uses the TOKEN budget (_phase_token_budget), never _phase_budget_total
+        (that is wall-clock seconds). Fail-OPEN (returns True) when no token
+        budget is set or the backend exposes no usage tracking — identical
+        contract to is_phase_budget_exhausted(), so it can only ever HELP a
+        budgeted run and never regress an un-instrumented one.
+        """
+        budget = self._phase_token_budget()
+        if not budget or budget <= 0:
+            return True
+        ai = getattr(self, "ai", None)
+        if ai is None or not hasattr(ai, "get_usage_stats"):
+            return True
+        try:
+            # The existing single authority is the ceiling: fully spent → nothing new.
+            if self.is_phase_budget_exhausted():
+                afford = False
+                used = budget
+            else:
+                used = ai.get_usage_stats(
+                    phase=(getattr(self, "name", "") or "")).get(
+                        "phase_approx_tokens", 0)
+                shed_at = self._LLM_SHED_FRACTIONS.get(kind, 1.0)
+                afford = (used / float(budget)) < shed_at
+        except Exception as e:
+            self.log.debug(f"[BUDGET] afford({kind}) check failed (fail-open): {e}")
+            return True
+        if not afford:
+            self.log.info(
+                f"[BUDGET] Shedding '{kind}' LLM self-correction — phase used "
+                f"~{int(used):,}/{int(budget):,} tokens; falling through to "
+                f"deterministic handling to preserve budget for higher-value work.")
+        return afford
 
     # ── WS3 / W3.3 / W3.5 — HITL-gated authorization (uniform ROE model) ──────
     def request_hitl_authorization(self, action_name: str, description: str,
@@ -918,9 +987,7 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
                 return command
             if "proxychains" in command:
                 return command
-            _RAW_SOCKET = {"nmap", "masscan", "dig", "naabu",
-                           "fping", "ping", "traceroute", "hping3"}
-            if (tool or "").lower() in _RAW_SOCKET:
+            if self._is_raw_socket_tool(tool):
                 self.log.debug(
                     f"[STEALTH] {tool} is a raw-socket tool — cannot route through Tor SOCKS; "
                     "running direct.")
@@ -933,50 +1000,160 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
             self.log.debug(f"stealth routing skipped (non-fatal): {_se}")
             return command
 
+    def _is_raw_socket_tool(self, tool: str) -> bool:
+        """P2-1 (raw-socket as a capability tag): a tool needs raw sockets if the
+        ToolCatalog tags it so — a newly-registered raw-socket tool is then routed/
+        guarded correctly with NO core edit — falling back to the static set for
+        tools not yet in the catalog."""
+        t = (tool or "").lower()
+        try:
+            from tools.tool_catalog import get_catalog
+            if get_catalog().needs_raw_socket(t):
+                return True
+        except Exception:
+            pass
+        return t in self._STEALTH_RAW_SOCKET_TOOLS
+
+    def _went_through_tor(self, command: str) -> bool:
+        """P4-4: True iff THIS command's traffic actually traversed Tor — Tor
+        verified AND the command is proxychains-wrapped (mirrors the raw-vs-proxied
+        decision in _apply_stealth_routing). A block on a DIRECT request is the
+        target answering our REAL IP (→ attribute to target); only a proxied
+        request can be a burned-exit self_egress."""
+        rot = getattr(self, "_ip_rotator", None)
+        if not rot or not getattr(rot, "_tor_verified", False):
+            return False
+        return "proxychains" in (command or "")
+
+    def _egress_gate(self, tool: str, command: str, result) -> str:
+        """P4-4 egress-causality gate. Attribute a block and decide whether
+        TARGET-directed evasion is warranted:
+          'evade'   — real target WAF (or a direct-IP block) → fire evasion,
+          'rotate'  — our OWN burned Tor exit → rotate the exit once (don't hammer
+                      the target with rotations against our own 403),
+          'abandon' — unknown/undeterminable cause → don't waste the phase budget.
+        Fails SAFE toward 'evade' (a gate bug must never SUPPRESS legitimate WAF
+        evasion). With Tor off, the block attributes to the target with no network
+        probe, so behaviour is unchanged for direct engagements."""
+        try:
+            from core.egress_probe import attribute_block, should_fire_evasion
+            went_tor = self._went_through_tor(command)
+            attribution = attribute_block(
+                (getattr(result, "stdout", "") or "") + (getattr(result, "stderr", "") or ""),
+                self._extract_host(command) or "",
+                went_through_tor=went_tor,
+                egress_probe=getattr(self, "_egress_probe", None),
+                egress_fingerprint=getattr(self, "_egress_fingerprint", None))
+            if should_fire_evasion(attribution):            # 'target'
+                return "evade"
+            # Only DIVERT when we positively attribute a Tor-routed block to our
+            # own egress; every other case (not_blocked, or a non-Tor block that
+            # isn't 'target') falls through to the EXISTING logic unchanged.
+            if went_tor and attribution == "self_egress" and getattr(self, "_ip_rotator", None):
+                return "rotate"
+            if went_tor and attribution == "unknown":
+                return "abandon"
+            return "evade"
+        except Exception as _eg:
+            self.log.debug(f"egress gate failed (defaulting to evade): {_eg}")
+            return "evade"
+
     # Local/util tools that make NO network connection — never a leak risk.
     _STEALTH_LOCAL_TOOLS = {
         "grep", "awk", "cut", "tee", "jq", "cat", "echo", "printf", "sed",
         "sort", "uniq", "tr", "wc", "xargs", "head", "tail", "ls", "find",
         "test", "id", "whoami", "pwd", "cd", "uname"}
 
+    # Raw-socket tools: SOCKS/Tor cannot carry raw packets, so these run DIRECT
+    # even under VERIFIED Tor (_apply_stealth_routing leaves them unwrapped).
+    # Shared by the routing and the fail-closed leak guard so the two can't drift.
+    _STEALTH_RAW_SOCKET_TOOLS = {
+        "nmap", "masscan", "dig", "naabu", "fping", "ping", "traceroute",
+        "hping3", "zmap", "unicornscan"}
+
+    # Any of these in the session stealth config REQUESTS IP anonymity (Tor). NOT
+    # ghost_mode — that is WAF header/JA3 evasion, which legitimately uses the
+    # real IP, so it must not trip the real-IP-leak guard.
+    _STEALTH_ANONYMITY_KEYS = (
+        "rotate_ip", "use_tor", "tor", "anonymize", "anonymity", "stealth_mode")
+
+    def _stealth_requested(self) -> bool:
+        """True iff the operator asked for IP anonymity (P4-5): the leak guard's
+        widened trigger — was ``rotate_ip``-only, so anonymity requested under any
+        other key ran DIRECT and leaked the real IP with the guard none the wiser."""
+        s = self._stealth or {}
+        return any(bool(s.get(k)) for k in self._STEALTH_ANONYMITY_KEYS)
+
     def _stealth_leak_guard(self, tool: str, command: str):
-        """Fail-CLOSED opsec gate (GAP-2 fix). If anonymity was REQUESTED
-        (stealth rotate_ip) but Tor is NOT verified working, a network tool would
-        otherwise run DIRECT and leak the operator's REAL IP to the target —
-        `_apply_stealth_routing` silently returns the command unwrapped in that
-        case. Block it LOUDLY instead of de-anonymizing the operator behind their
-        back. Returns a BLOCKED ToolResult to abort the run, or None to allow.
-        Opt out with stealth_config['allow_direct_on_tor_fail'] = True.
+        """Fail-CLOSED opsec gate (GAP-2 / STEALTH-DEGRADE-1, both halves).
+
+        If IP anonymity was REQUESTED but the run would still reach the target
+        from the operator's REAL IP, block it LOUDLY rather than de-anonymize them
+        behind their back. Two leak paths are covered:
+
+          1. **Tor not verified** — a proxiable (HTTP/TCP) tool would run DIRECT
+             because `_apply_stealth_routing` returns it unwrapped when Tor is not
+             verified working.
+          2. **Raw-socket tool under VERIFIED Tor (the higher-severity half)** —
+             SOCKS cannot carry raw packets, so nmap/masscan/dig/naabu run DIRECT
+             *even when Tor is verified*. Verified Tor does NOT protect them, so
+             the old `_tor_verified → allow` early-return leaked the real IP. These
+             are blocked whenever anonymity is requested, regardless of Tor state.
+
+        Returns a BLOCKED ToolResult to abort, or None to allow. Local/`--help`
+        probes are exempt (no network). Opt out with
+        stealth_config['allow_direct_on_tor_fail'] = True.
         """
         try:
-            if not (self._stealth or {}).get("rotate_ip"):
+            if not self._stealth_requested():
                 return None  # anonymity not requested — nothing to protect
-            rot = getattr(self, "_ip_rotator", None)
-            if rot and getattr(rot, "_tor_verified", False):
-                return None  # Tor verified — routing will happen, no leak
-            # `_tor_verified` flips to False transiently — a rotation forces a
-            # re-verify, a circuit hiccups. Don't permanently brick the whole
-            # phase (block EVERY command) on a recoverable state: try ONCE to
-            # bring Tor back. ensure_tor_ready short-circuits instantly if Tor is
-            # genuinely disabled, so this doesn't add latency on real failure.
-            if rot is not None:
-                try:
-                    if rot.ensure_tor_ready():
-                        return None  # recovered — routing will happen, no leak
-                except Exception:
-                    pass
-            if (self._stealth or {}).get("allow_direct_on_tor_fail"):
-                return None  # operator explicitly accepts running direct
             _t = (tool or "").lower()
             _c = (command or "").lower()
             # Local commands and --help/--version probes make no network request.
             if (_t in self._STEALTH_LOCAL_TOOLS
                     or "--help" in _c or "--version" in _c or " -version" in _c):
                 return None
+            allow_direct = bool((self._stealth or {}).get("allow_direct_on_tor_fail"))
+
+            # ── Half 2 (higher severity): raw-socket tool leaks even under
+            # verified Tor. Block regardless of _tor_verified. If the operator
+            # manually proxied it (e.g. `proxychains nmap -sT`) they've taken
+            # ownership — let it through.
+            if self._is_raw_socket_tool(_t) and "proxychains" not in _c:
+                if allow_direct:
+                    return None
+                reason = (
+                    "OPSEC FAIL-CLOSED: anonymity was requested but "
+                    f"'{tool}' is a RAW-SOCKET tool — SOCKS/Tor cannot carry its "
+                    "packets, so it runs DIRECT and leaks your REAL IP even under "
+                    "verified Tor. Blocked. Use a proxy-able tool, run it via "
+                    "proxychains yourself, or set allow_direct_on_tor_fail=true.")
+                self.log.error(f"[STEALTH FAIL-CLOSED] {reason}")
+                return ToolResult(tool=tool, command=command, stdout="", stderr=reason,
+                                  exit_code=-1, duration_seconds=0,
+                                  status=ResultStatus.BLOCKED)
+
+            # ── Half 1: proxiable tool, but is Tor actually up?
+            rot = getattr(self, "_ip_rotator", None)
+            if rot and getattr(rot, "_tor_verified", False):
+                return None  # Tor verified — routing will happen, no leak
+            # `_tor_verified` flips to False transiently — a rotation forces a
+            # re-verify, a circuit hiccups. Don't permanently brick the whole
+            # phase on a recoverable state: try ONCE to bring Tor back.
+            # ensure_tor_ready short-circuits instantly if Tor is genuinely
+            # disabled, so this adds no latency on real failure.
+            if rot is not None:
+                try:
+                    if rot.ensure_tor_ready():
+                        return None  # recovered — routing will happen, no leak
+                except Exception:
+                    pass
+            if allow_direct:
+                return None  # operator explicitly accepts running direct
             reason = (
-                "OPSEC FAIL-CLOSED: anonymity (Tor) was requested (rotate_ip) but "
-                f"Tor is not verified working — running '{tool}' would leak your "
-                "REAL IP to the target. Blocked. Restart/fix Tor, or set stealth "
+                "OPSEC FAIL-CLOSED: anonymity (Tor) was requested but Tor is not "
+                f"verified working — running '{tool}' would leak your REAL IP to "
+                "the target. Blocked. Restart/fix Tor, or set stealth "
                 "allow_direct_on_tor_fail=true to knowingly run direct.")
             self.log.error(f"[STEALTH FAIL-CLOSED] {reason}")
             return ToolResult(tool=tool, command=command, stdout="", stderr=reason,
@@ -1042,6 +1219,24 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
             )
         except Exception as _e:
             self.log.debug(f"tool metric record failed: {_e}")
+
+    def _observe(self, location: str, **kw):
+        """P5-4 (D-OBS-1): structured, self-safe replacement for a silent
+        ``except Exception: pass`` around a best-effort call. Records any
+        exception in the ``with`` block into the failure_patterns table (via
+        core.failure_record.observe), tagged with this agent + location, then
+        suppresses it — pre-binding store/engagement/agent/logger so a call site
+        is one line. Never raises into the wrapped operation.
+
+        Usage:  ``with self._observe("advisor.record_tool_outcome", tool=tool):``
+                ``    self.advisor.record_tool_outcome(...)``
+        """
+        from core.failure_record import observe
+        return observe(
+            getattr(self, "store", None),
+            getattr(getattr(self, "session", None), "engagement_id", None),
+            getattr(self, "name", "agent"),
+            location, logger=getattr(self, "log", None), **kw)
 
     def _track_failure(self, result: ToolResult):
         if not result or result.status == ResultStatus.SUCCESS:
@@ -1197,13 +1392,14 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
                 return "medium"
             return severity
 
-        # Check verification evidence
-        has_evidence = (
-            "vuln_proven:" in detail_lower) or (
-            "confirmed" in detail_lower)
+        # Check verification evidence — P0-3: "evidence" is a re-measured
+        # ProofLedger row (finding_is_proven), NEVER the substring
+        # 'vuln_proven'/'confirmed' an emitter can print into the detail.
+        # Closes VALIDATE-SEVERITY-SUBSTR.
+        has_evidence = finding_is_proven(
+            {"detail": detail}, getattr(self, "_proof_ledger", None))
 
-        # A finding WITHOUT VULN_PROVEN: or confirmed in detail -> cap at
-        # medium
+        # A finding without a resolvable proof token -> cap at medium
         if not has_evidence:
             if severity in {"high", "critical"}:
                 return "medium"
@@ -1252,17 +1448,15 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
         (possibly adjusted) (severity, detail). Defensive: never raises."""
         if severity not in ("high", "critical"):
             return severity, detail
-        # Never downgrade an EVIDENCE-BACKED finding. A confirmed_vulnerability has
-        # already passed the hypothesis engine's rigorous differential validation
-        # and carries an explicit Proof[...]; the ops-sanity heuristic is a backstop
-        # for the AI's UNVALIDATED self-reported claims and must NOT override a
-        # proven PoC (same rule as the false-positive guard — a hardcoded signature
-        # never overrides real evidence). Without this, a proven LFI/RCE whose proof
-        # mentions host terms (/etc/, root, shell) — and which IS the first foothold,
-        # so has_target_foothold is still False — was silently demoted to a lead.
+        # Never downgrade a PROVEN finding — the ops-sanity heuristic is a
+        # backstop for UNVALIDATED self-reported claims and must NOT override
+        # real evidence (a proven LFI/RCE whose proof mentions host terms like
+        # /etc/, root, shell — and which IS the first foothold — must survive).
+        # P0-3: "proven" is a re-measured ProofLedger row (finding_is_proven),
+        # NOT the finding TYPE and NOT the substring VULN_PROVEN/Proof[, either
+        # of which an emitter forges. Closes SELFAWARE-OPSSANITY-BYPASS.
         _d = detail or ""
-        if (finding_type == "confirmed_vulnerability"
-                or "VULN_PROVEN" in _d or "Proof[" in _d):
+        if finding_is_proven({"detail": _d}, getattr(self, "_proof_ledger", None)):
             return severity, detail
         if not hasattr(self, "awareness") or not self.awareness:
             return severity, detail
@@ -1288,9 +1482,30 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
         return severity, detail
 
     def add_finding(self, finding_type: str, target: str, detail: str,
-                    severity: str = "info", source_tool: str = None, command: str = None):
+                    severity: str = "info", source_tool: str = None, command: str = None,
+                    *, proof_method: str = None, proof_ctx: "ProofContext" = None,
+                    source_tool_run_id: int = None):
         with self._findings_lock:
-            # Enforce severity validation rules
+            # P0-3: stamp a durable, re-measurable proof token BEFORE severity
+            # validation and dedup, so every downstream trust decision keys on a
+            # ProofLedger row (finding_is_proven), never on an emitter substring
+            # like "VULN_PROVEN". stamp() returns '' unless the measurement
+            # actually re-proves, so an unproven claim carries no token and is
+            # handled as a lead. No caller may hand in a pre-built Evidence.
+            evidence_id = ""
+            if proof_method and proof_ctx is not None and getattr(self, "_proof_ledger", None):
+                try:
+                    evidence_id = self._proof_ledger.stamp(
+                        proof_method, proof_ctx,
+                        vuln_class=finding_type, title=str(detail)[:120],
+                        severity=severity)
+                except Exception as _pe:
+                    self.log.debug(f"proof stamp failed (non-fatal): {_pe}")
+                    evidence_id = ""
+                if evidence_id:
+                    detail = f"[proof:{evidence_id}] {detail}"
+
+            # Enforce severity validation rules (proof-aware; see _validate_severity)
             severity = self._validate_severity(finding_type, detail, severity)
             # W8.2 — ops-sanity backstop: catch self-fooling exotic conclusions
             # (host-level claims with no foothold, etc.) and demote to a lead.
@@ -1308,7 +1523,9 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
             # while still merging pure cache-bust variants.
             dedup_detail = re.sub(
                 r'(https?://[^\s?#]+)[?#]\S*', r'\1', detail_prefix).strip().lower()
-            dedup_key = f"{finding_type}::{target}::{dedup_detail[:160]}"
+            # P0-3: evidence_id is part of the dedup identity so a proven finding
+            # is never collapsed into a look-alike unproven lead (or vice versa).
+            dedup_key = f"{finding_type}::{target}::{evidence_id}::{dedup_detail[:160]}"
             if dedup_key in self._findings_seen:
                 self._finding_dedup_counts[dedup_key] = self._finding_dedup_counts.get(
                     dedup_key, 0) + 1
@@ -1334,42 +1551,16 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
                 finding_type=finding_type,
                 target=target,
                 detail=detail,
-                severity=severity
+                severity=severity,
+                tool_run_id=source_tool_run_id,  # P0-10: exact originating-run link (may be None)
             )
 
-            # Populate AttackGraph
-            target_node = f"target:{target}"
-            finding_node = f"finding:{finding_type}:{
-                hashlib.md5(
-                    detail.encode()).hexdigest()[
-                    :8]}"
-
-            self.attack_graph.add_node(
-                self.session.engagement_id,
-                target_node,
-                "TARGET",
-                {"url": target}
-            )
-
-            self.attack_graph.add_node(
-                self.session.engagement_id,
-                finding_node,
-                "FINDING",
-                {
-                    "type": finding_type,
-                    "detail": detail,
-                    "severity": severity,
-                    "source": source_tool or self.name
-                }
-            )
-
-            # Link target to finding
-            self.attack_graph.add_edge(
-                self.session.engagement_id,
-                target_node,
-                finding_node,
-                "CONTAINS"
-            )
+            # P5-8 (D-WIRE-1): the AttackGraph populate was removed here. The graph
+            # was WRITE-ONLY — base_agent filled graph_nodes/graph_edges on every
+            # finding, but nothing in production ever read get_filtered_context
+            # (only tests did), and the convergence work (P4-3) uses the intent
+            # ledger, not this graph. Deleted both sides. The live evidence_graph
+            # (recon writes → exploitation reads) is a SEPARATE system and untouched.
 
             self._findings.append({
                 "type": finding_type,
@@ -2112,13 +2303,47 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
             out = ((result.stdout or "") + "\n" + (result.stderr or "")).strip()
             # Clean raw output from ANSI codes, VT100 escapes, and excessive noise before prompting
             out = clean_text(out)
-            sig = tool + "|" + " ".join(out.lower().split())[:160]
-            cache = getattr(self, "_outcome_interp_cache", None)
-            if cache is None:
-                cache = self._outcome_interp_cache = {}
-            if sig in cache:
-                return cache[sig]
+            # P1-5 (CACHE-1 de-poison): the verdict cache key is
+            # intent | status | exit_code | FULL-error fingerprint. The old key
+            # was tool + a 160-char output PREFIX, so two 900-char errors sharing
+            # a prefix collided onto ONE verdict (a first-seen "abandon" then
+            # starving every later distinct error). Fingerprint the WHOLE error
+            # with whitespace AND digit runs collapsed (ports/counts/timestamps
+            # don't fork the class), then hash it — bounded length, full content.
+            err_norm = re.sub(r'\d+', '#', " ".join(out.lower().split()))
+            err_fp = hashlib.md5(
+                err_norm.encode("utf-8", "ignore")).hexdigest()[:16]
+            _status = getattr(result, "status", "")
+            _status = getattr(_status, "value", _status)
+            _exit = getattr(result, "exit_code", "")
+            sig = f"{self._command_intent_key(command)}|{_status}|{_exit}|{err_fp}"
+
+            # Lazy-init lock; TTL + size-bounded cache so a long engagement can't
+            # grow it without bound and a stale verdict expires instead of
+            # pinning forever.
+            lock = getattr(self, "_outcome_cache_lock", None)
+            if lock is None:
+                lock = self._outcome_cache_lock = threading.Lock()
+            _TTL, _CAP = 900.0, 512
+            _nowt = _time_module.time()
+            with lock:
+                cache = getattr(self, "_outcome_interp_cache", None)
+                if cache is None:
+                    cache = self._outcome_interp_cache = {}
+                hit = cache.get(sig)
+                if hit is not None:
+                    verdict, ts = hit
+                    if _nowt - ts < _TTL:
+                        return verdict
+                    cache.pop(sig, None)  # expired → re-reason
             if not getattr(self, "ai", None):
+                return default
+            # P4-2: cache MISS → this triage would cost a live LLM call. Under a
+            # starving token budget, shed it and let the loop's deterministic
+            # guards (classify_unrepairable / transport-dead / exit-code) decide.
+            # Triage is the highest-value kind, so it only sheds at full
+            # exhaustion; a cache HIT above is free and always returns.
+            if not self._afford_llm("triage"):
                 return default
             # Limit error snippet to high-signal 800 chars to avoid window saturation
             error_snippet = out[:800] if len(out) > 800 else (out or "(no output)")
@@ -2152,7 +2377,16 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
                 if act in ("accept", "abandon", "repair"):
                     verdict = {"action": act,
                                "reason": str(data.get("reason", ""))[:160]}
-            cache[sig] = verdict
+            # P1-5: store (verdict, timestamp); evict oldest when over the cap.
+            with lock:
+                cache = getattr(self, "_outcome_interp_cache", None)
+                if cache is None:
+                    cache = self._outcome_interp_cache = {}
+                cache[sig] = (verdict, _nowt)
+                if len(cache) > _CAP:
+                    for _old in sorted(
+                            cache, key=lambda k: cache[k][1])[:len(cache) - _CAP]:
+                        cache.pop(_old, None)
             return verdict
         except Exception as e:
             self.log.debug(f"outcome interpret failed (default=repair): {e}")
@@ -2523,7 +2757,11 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
             return res
         current_command = hardened
 
-        cmd_hash = hashlib.sha256(current_command.encode()).hexdigest()[:16]
+        # P1-4: the failure-reject window, cycle detection and evasion breaker all
+        # key on the INTENT, not sha256(full_command) — so proxychains/UA/value
+        # mutations of the same logical attempt converge onto one key (the reason
+        # the old per-cmd_hash breaker never tripped). One convergence authority.
+        cmd_hash = self._command_intent_key(current_command, target)
         now = _time_module.time()
 
         # ── V6: COMMAND DEDUPLICATION ──
@@ -2554,6 +2792,23 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
         # force a strategy change (different tool or technique).
         clean_host = self._extract_host(current_command) or target or "unknown"
         tool_target_key = f"{tool}@{clean_host}"
+
+        # ── P4-3: ENFORCED CONVERGENCE BREAKER (intent-ledgered, NO LLM) ─────
+        # A doomed intent (the 403→rotate-Tor→403 cascade, or any tool that keeps
+        # failing to move the needle) is abandoned DETERMINISTICALLY once it has
+        # burned its attempt budget without producing a single finding for its OWN
+        # host. See _convergence_breaker.
+        _abandon, _why = self._convergence_breaker(cmd_hash, clean_host, tool, is_repair)
+        if _abandon:
+            self.log.warning(
+                f"[CONVERGENCE BREAKER] Abandoning intent '{cmd_hash}' — {_why}. "
+                f"No LLM, no further evasion: this approach is not converging.")
+            res = ToolResult(
+                tool=tool, command=current_command, stdout="",
+                stderr=f"Convergence breaker: {_why}. Pivot to a different approach.",
+                exit_code=-1, duration_seconds=0, status=ResultStatus.BLOCKED)
+            self._track_failure(res)
+            return res
 
         # Get cycle count from repair history
         cycle_count = 0
@@ -2655,10 +2910,9 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
                     tool, next_tool, current_command)
                 if translated_cmd:
                     current_command = translated_cmd
-                    cmd_hash = hashlib.sha256(
-                        current_command.encode()).hexdigest()[:16]
+                    cmd_hash = self._command_intent_key(current_command, target)  # P1-4
                     self.log.info(
-                        f"[CYCLE RECOVERY] Translated command: {current_command} (New hash: {cmd_hash})")
+                        f"[CYCLE RECOVERY] Translated command: {current_command} (New intent key: {cmd_hash})")
 
                 tool = next_tool
             else:
@@ -2836,10 +3090,23 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
             else:
                 # UNIVERSAL stealth: route tool traffic through Tor when active.
                 run_command = self._apply_stealth_routing(tool, current_command)
+                # P1-2 (CAP-2): make the command runnable at the privilege the
+                # environment ACTUALLY provides — escalate via sudo when raw
+                # sockets are reachable under root, else degrade to a connect
+                # scan. Applied AFTER stealth so any sudo prefix leads; a strict
+                # no-op unless the capability probe measured the environment.
+                run_command = self.enforce_capability(run_command)
+                # P3-3: if a WAF-evasion tactic was applied to this command on a
+                # prior loop iteration (stashed on the evasion-stripped intent
+                # key), tell the tool manager so it persists evasion_applied on
+                # this run's tool_runs row — the durable signal the batch WAF
+                # learner reads. None when no evasion was applied (the norm).
+                _applied = getattr(self, "_applied_waf_tactic", {}).get(cmd_hash)
                 result = self.tools.run(
                     tool, run_command, self.name,
                     timeout=current_timeout, save_raw=True,
-                    output_path=output_path, silent=silent
+                    output_path=output_path, silent=silent,
+                    evasion_applied=_applied
                 )
 
             if result is None:
@@ -2985,15 +3252,15 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
             if result.success:
                 # ── NEW: Persistent Syntax Learning ──
                 if tool and hasattr(self, "syntax_learner"):
-                    try:
+                    # P5-4: silent swallow → structured, queryable failure record
+                    # (a lost syntax-learning write is self-knowledge that vanished).
+                    with self._observe("syntax_learner.learn_syntax",
+                                       tool=tool, severity="info"):
                         err_ctx = str(result.stderr or result.stdout)[
                             :200] if repair_count > 0 else "Success on first try"
                         self.syntax_learner.learn_syntax(
                             tool, current_command, err_ctx,
                             context=self._syntax_context())
-                    except Exception as _e:
-                        self.log.debug(
-                            f"Failed to persist syntax learning: {_e}")
 
                 # Update dedup record: mark as succeeded so future identical
                 # commands are allowed
@@ -3007,7 +3274,10 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
                 self._record_tool_metric(result, success=True)
                 # Record in advisor for strategic learning
                 if hasattr(self, "advisor") and self.advisor:
-                    try:
+                    # P5-4: was a silent try/except swallow — now a structured,
+                    # queryable failure record (still suppresses, still best-effort).
+                    with self._observe("advisor.record_tool_outcome",
+                                       tool=tool, severity="info"):
                         self.advisor.record_tool_outcome(
                             tool=tool,
                             target=target or cmd_host or "unknown",
@@ -3016,12 +3286,12 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
                                 result, "duration_seconds", 0.0) or 0.0,
                             phase=self.name,
                         )
-                    except Exception as _advisor_err:
-                        self.log.debug(
-                            f"Advisor success record failed: {_advisor_err}")
 
                 if tool.lower() in HTTP_TOOLS:
-                    try:
+                    # P5-4: WAF-learning success feedback — a swallowed failure
+                    # here silently starves the WAF learner; record it instead.
+                    with self._observe("waf_learner.success_feedback",
+                                       tool=tool, severity="info"):
                         recon_bundle = self.store.get_phase_data(
                             self.session.engagement_id, "recon"
                         ) if hasattr(self, 'store') and hasattr(self.session, 'engagement_id') else {}
@@ -3041,11 +3311,21 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
                                 if isinstance(waf_fingerprint, dict):
                                     waf_id = waf_fingerprint.get(
                                         "waf_type") or waf_fingerprint.get("id") or "generic"
-                                self._waf_learner.update_tactic_effectiveness(
-                                    "header_mutation", True, waf_id=str(waf_id))
-                    except Exception as _waf_learn_err:
-                        self.log.debug(
-                            f"WAF learning success feedback error (non-fatal): {_waf_learn_err}")
+                                # P3-3 (WAFLEARN-KEYSPLIT): credit the tactic that
+                                # ACTUALLY got us past the WAF — the one stashed on
+                                # the block path — not a hardcoded "header_mutation"
+                                # (which credited that tactic even when a DIFFERENT
+                                # one, or none at all, produced the success). No
+                                # tactic applied → a clean first-try success, so
+                                # there is nothing to credit; don't fabricate one.
+                                applied = getattr(
+                                    self, "_applied_waf_tactic", {}).pop(cmd_hash, None)
+                                if applied:
+                                    from intelligence.learning_signal import LearningOutcome
+                                    self._waf_learner.record_outcome(
+                                        LearningOutcome.from_result(
+                                            tool, result, evasion_tactic=applied),
+                                        applied, waf_id=str(waf_id))
                 return result
 
             last_result = result
@@ -3059,7 +3339,9 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
                         current_command, "tool_execution", success=False)
                 # Record in advisor for strategic learning
                 if hasattr(self, "advisor") and self.advisor:
-                    try:
+                    # P5-4: structured, self-safe replacement for the silent swallow.
+                    with self._observe("advisor.record_tool_outcome",
+                                       tool=tool, severity="info"):
                         self.advisor.record_tool_outcome(
                             tool=tool,
                             target=target or cmd_host or "unknown",
@@ -3068,9 +3350,6 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
                                 last_result, "duration_seconds", 0.0) or 0.0,
                             phase=self.name,
                         )
-                    except Exception as _advisor_err:
-                        self.log.debug(
-                            f"Advisor failure record failed: {_advisor_err}")
                 return last_result
 
             if result.exit_code in NETWORK_UNFIXABLE_EXITS:
@@ -3193,6 +3472,39 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
 
             if result.status in (ResultStatus.BLOCKED, "blocked",
                                  ResultStatus.WAF_BLOCKED, "waf_blocked"):
+                # ── P4-4 EGRESS CAUSALITY GATE ──────────────────────────────────
+                # Before firing TARGET evasion, attribute the block. If our OWN
+                # egress (a burned Tor exit) is what's blocked, rotating/evading at
+                # the target is wasted — the target never blocked us (the 403→
+                # rotate-Tor→still-403 cascade, RC-1/RC-2/DEEP-1/DEEP-7).
+                _egress_action = self._egress_gate(tool, current_command, result)
+                if _egress_action != "evade":
+                    if _egress_action == "rotate":
+                        if not hasattr(self, "_egress_rotated"):
+                            self._egress_rotated = {}
+                        if not self._egress_rotated.get(cmd_hash):
+                            self._egress_rotated[cmd_hash] = True
+                            try:
+                                self._ip_rotator.rotate()
+                                self.log.warning(
+                                    f"[EGRESS] '{tool}' block attributed to self_egress "
+                                    f"(burned Tor exit) — rotated the exit ONCE and retrying, "
+                                    f"instead of hammering the target with evasion.")
+                            except Exception as _re:
+                                self.log.debug(f"egress rotate failed: {_re}")
+                            repair_count += 1
+                            continue
+                    # 'abandon', or self_egress already rotated once → stop target-evasion.
+                    self.log.warning(
+                        f"[EGRESS] '{tool}' block NOT attributed to the target "
+                        f"({_egress_action}) — abandoning WAF evasion (evading against our "
+                        f"own egress or an unknown cause just burns the phase budget).")
+                    self._command_history[cmd_hash] = {
+                        "ts": time.time(), "status": getattr(
+                            ResultStatus, "FAILURE", "failed")}
+                    self._track_failure(result)
+                    return result
+                # attribution == 'target' → fire the existing evasion engine.
                 # ── WAF EVASION ENGINE: activate learned evasion tactics on any block ──
                 # WafEvasionEngine picks the best tactic based on recon fingerprint data.
                 # Actual command mutation is handled by WafGhostEngine (the
@@ -3235,7 +3547,10 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
                                 f"[WAF EVASION] Tactic {tactic_name}: Rotating IP")
                             current_command = f"proxychains4 -q {current_command}"
 
-                        try:
+                        # P5-4: WAF-learning block feedback — record a swallowed
+                        # failure instead of losing it (nested in the evasion try).
+                        with self._observe("waf_learner.block_feedback",
+                                           tool=tool, severity="info"):
                             host_for_learning = cmd_host or self._extract_host(
                                 current_command) or target or "default"
                             if self._waf_ghost:
@@ -3246,11 +3561,22 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
                                 if isinstance(waf_fingerprint, dict):
                                     waf_id = waf_fingerprint.get(
                                         "waf_type") or waf_fingerprint.get("id") or "generic"
-                                self._waf_learner.update_tactic_effectiveness(
-                                    str(tactic), False, waf_id=str(waf_id))
-                        except Exception as _waf_block_learn_err:
-                            self.log.debug(
-                                f"WAF learning block feedback error (non-fatal): {_waf_block_learn_err}")
+                                # P3-3 (WAFLEARN-KEYSPLIT): debit the NORMALIZED
+                                # tactic name via the single record_outcome entry —
+                                # was `str(tactic)`, the stringified dict, which
+                                # could never match the success-side credit key.
+                                # Remember which tactic we applied to THIS command
+                                # (keyed on the evasion-stripped intent key, stable
+                                # across mutations) so a later success credits the
+                                # SAME tactic, not a hardcoded one.
+                                if not hasattr(self, "_applied_waf_tactic"):
+                                    self._applied_waf_tactic = {}
+                                self._applied_waf_tactic[cmd_hash] = tactic_name
+                                from intelligence.learning_signal import LearningOutcome
+                                self._waf_learner.record_outcome(
+                                    LearningOutcome.from_result(
+                                        tool, result, evasion_tactic=tactic_name),
+                                    tactic_name, waf_id=str(waf_id))
                 except Exception as _waf_evasion_err:
                     self.log.debug(
                         f"WAF evasion engine error (non-fatal): {_waf_evasion_err}")
@@ -3349,7 +3675,10 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
                     continue
 
                 # ── V6: AI-DRIVEN REPAIR (Final Failsafe) ──
-                if self.ai and repair_count >= max_repairs - 1:
+                # P4-2: gate the creative-mutation LLM on the token budget — under
+                # starvation this sheds and the loop falls through to IP rotation /
+                # timeout escalation / deterministic abandon below (no LLM spent).
+                if self.ai and repair_count >= max_repairs - 1 and self._afford_llm("repair"):
                     self.log.info(
                         f"[AI REPAIR] Standard repairs failed for {tool}. Asking AI for creative mutation...")
                     try:
@@ -3440,10 +3769,9 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
                     current_command = lighter_cmd
                     current_command = self._canonicalize_tool_command(
                         tool, current_command, target=target or cmd_host)
-                    cmd_hash = hashlib.sha256(
-                        current_command.encode()).hexdigest()[:16]
+                    cmd_hash = self._command_intent_key(current_command, target)  # P1-4
                     self.log.info(
-                        f"[TIMEOUT ESCALATION] Reduced scope/flags: {current_command[:120]}... (New hash: {cmd_hash})")
+                        f"[TIMEOUT ESCALATION] Reduced scope/flags: {current_command[:120]}... (New intent key: {cmd_hash})")
                     # A lighter command finishes faster, so trim the timeout to
                     # fail CHEAPLY instead of burning N full timeouts (the nmap
                     # --script case burned 900s×3 = 45min of dead air). BUT under
@@ -3482,7 +3810,11 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
                 self.log.warning(f"Repair attempt for '{tool}' failed. Breaking loop to prevent infinite recursion.")
                 break
 
-            suggestion = self._ai_repair_tool(tool, current_command, result)
+            # P4-2: the AI flag-repair is the last LLM in the loop. When the token
+            # budget is starved, shed it (None) so we fall to the deterministic
+            # abandon below instead of paying for a repair we can't afford.
+            suggestion = (self._ai_repair_tool(tool, current_command, result)
+                          if self._afford_llm("repair") else None)
             if suggestion and suggestion != current_command:
                 # RC-4 FIX: Hash the raw AI suggestion BEFORE flag correction.
                 # The corrector used to produce a different hash than the suggestion,
@@ -3508,10 +3840,9 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
                 current_command = self._clean_command(suggestion)
                 current_command = self._canonicalize_tool_command(
                     tool, current_command, target=target or cmd_host)
-                cmd_hash = hashlib.sha256(
-                    current_command.encode()).hexdigest()[:16]
+                cmd_hash = self._command_intent_key(current_command, target)  # P1-4
                 self.log.info(
-                    f"AI suggested command repair. (New hash: {cmd_hash})")
+                    f"AI suggested command repair. (New intent key: {cmd_hash})")
                 repair_count += 1
                 continue
             else:
@@ -3721,7 +4052,12 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
             retry = m.group(1)
 
         if retry is not None:
-            wait = int(retry)
+            # Cap a server/WAF-supplied Retry-After the SAME as the backoff path.
+            # Unbounded, a hostile/misconfigured `retry-after: 3600` froze the
+            # whole engagement for an hour (a live run spent its tail here). This
+            # is the unbounded-sleep class P4-1 bounded elsewhere — this
+            # rate-limit site was the one it missed.
+            wait = min(int(retry), RATE_LIMIT_MAX_BACKOFF)
         else:
             self._host_rate_limits[host] = self._host_rate_limits.get(
                 host, RATE_LIMIT_INITIAL_BACKOFF) * 2
@@ -3860,6 +4196,12 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
         make things worse than today.
         """
         try:
+            # P4-2: grounding is a per-loop enhancement LLM call (lowest-value
+            # tier). Under a starving token budget, skip it and return the drafts
+            # UNCHANGED — they still run; the normal repair loop copes if a flag is
+            # wrong. Grounding "can only help", so shedding it can only cost quality.
+            if not self._afford_llm("grounding"):
+                return prescriptions
             drafts = [p for p in (prescriptions or [])
                       if isinstance(p, dict) and p.get("command")]
             if not drafts:
@@ -3939,11 +4281,18 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
             env_constraints = ""
             try:
                 cap = self._probe_capabilities()
-                if cap and not cap.get("raw_socket"):
+                # P1-3 (PROSE-1): only state a capability constraint when it is
+                # DEFINITIVELY measured (probe_ok) AND no privileged path exists at
+                # all — direct raw sockets absent AND no root-escalation path. The
+                # enforce_capability gate auto-escalates (sudo) or auto-degrades
+                # (-sT) at dispatch, so we NEVER tell the AI to "drop privileged
+                # modes": that forbade a path the engine can actually take.
+                if (cap.get("probe_ok") and not cap.get("raw_socket")
+                        and not cap.get("raw_socket_via_root")):
                     env_constraints += (
-                        "- NOT root and NO raw-socket capability: any privileged/raw "
-                        "operation fails. Use the unprivileged equivalent for the chosen "
-                        "tool; drop --privileged and privileged-only scan modes.\n")
+                        "- No raw-socket capability and no root-escalation path: the "
+                        "engine will automatically run the unprivileged equivalent "
+                        "(e.g. a TCP-connect scan) for whatever tool you pick.\n")
                 env_constraints += self._workspace_state_note()
             except Exception:
                 pass
@@ -4157,7 +4506,9 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
                 syntax_hints += "\n"
 
         # ── Check repair history (FIX #5): Learn from repeated failures ──
-        cmd_hash = hashlib.sha256(command.encode()).hexdigest()[:16]
+        # P1-4: same intent key as safe_run_tool, so repair-attempt tracking here
+        # and cycle detection there share ONE identity for the same command.
+        cmd_hash = self._command_intent_key(command)
         repair_history = self._repair_attempts_history.get(cmd_hash, [])
         history_summary = ""
         if len(repair_history) >= 2:
@@ -4741,8 +5092,11 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
                         parsed, "result") and parsed.result and not parsed.result.success:
                     consecutive_failures += 1
                     # Invoking the StrategicMentor if failure chain threshold
-                    # is breached (consecutive_failures >= 3)
-                    if consecutive_failures >= 3:
+                    # is breached (consecutive_failures >= 3).
+                    # P4-2: the mentor (and its nested smart-error-recovery query)
+                    # is the lowest-value tier — under a starving token budget shed
+                    # it and let the ReAct loop's own failure bound carry the run.
+                    if consecutive_failures >= 3 and self._afford_llm("mentor"):
                         self.log.warning(
                             f"[{self.name}] Failure Chain breached ({consecutive_failures} consecutive failures). Invoking Strategic Mentor...")
                         transcript_str = json.dumps(
@@ -4820,8 +5174,12 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
                                     observation += "\n\n[SYSTEM HINT] This is your final attempt to repair. If it fails, move on."
                 else:
                     consecutive_failures = 0
-                self._react_history[-1]["observation"] = observation
-                user_prompt = self._build_observation_prompt(observation)
+                # P4-6 (DEEP-4): deterministically cap the stored observation so a
+                # huge tool output can't bloat the ReAct history (which the mentor
+                # serializes in full) and push later prompts into silent truncation.
+                from core.context_budget import cap_output
+                self._react_history[-1]["observation"] = cap_output(observation)
+                user_prompt = self._build_observation_prompt(cap_output(observation))
                 continue
             break
 
@@ -4891,39 +5249,296 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
     # ═══════════════════════════════════════════════════════════════════
     def _probe_capabilities(self) -> dict:
         """Live-probe the execution environment's privilege level and raw-socket
-        capability ONCE (cached). Universal facts the AI reasons over so it never
-        generates a command that needs privileges the environment lacks."""
+        capability (cached ONLY once it has genuinely succeeded). Universal facts
+        the AI reasons over and the enforce_capability gate escalates on, so the
+        engine never generates a command needing privileges it lacks — and never
+        REJECTS a command whose privilege it could actually obtain.
+
+        P1-1 (CAP-1): probes BOTH contexts. Context 1 is the current euid; context
+        2 re-runs the SAME ground-truth SOCK_RAW test through the as_root path to
+        MEASURE `raw_socket_via_root` (the capability P1-2 escalates on — not the
+        inferred `root_path_available`). A `probe_ok` flag distinguishes "probe
+        ran, no root" from "probe FAILED": a failed probe is never cached as an
+        authoritative hard-reject (it retries once, then returns probe_ok=False so
+        consumers fall back to the advisory/graceful path instead of forbidding a
+        working command)."""
         cached = getattr(self, "_capabilities_cache", None)
-        if cached is not None:
+        # Only a probe that actually ran is authoritative-cacheable; a prior
+        # failure is re-probed (the environment may have recovered).
+        if cached is not None and cached.get("probe_ok"):
             return cached
-        caps = {}
-        if self._ssh:
+
+        caps = {"probe_ok": False}
+        if not self._ssh:
+            # No remote executor to probe — UNKNOWN, not a hard reject.
+            self._capabilities_cache = caps
+            return caps
+
+        # GROUND-TRUTH raw-socket test: actually try to open a SOCK_RAW (capsh/
+        # getcap lie under WSL — they can report cap_net_raw present while the
+        # kernel still refuses the open). Fall back to "root ⇒ available" only if
+        # python3 is missing.
+        RAW_TEST = (
+            "if command -v python3 >/dev/null 2>&1; then "
+            "python3 -c 'import socket; "
+            "socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP); "
+            "print(\"RAW:yes\")' 2>/dev/null || echo RAW:no; "
+            "elif [ \"$(id -u)\" = 0 ]; then echo RAW:yes; else echo RAW:no; fi")
+
+        def _probe(as_root: bool):
+            ec, out, _ = self._ssh.execute(
+                "id -u; " + RAW_TEST, timeout=TOOL_VERIFY_TIMEOUT, as_root=as_root)
+            rows = [r.strip() for r in (out or "").splitlines() if r.strip()]
+            if not rows:
+                return None
             try:
-                # uid + GROUND-TRUTH raw-socket test: actually try to open a
-                # SOCK_RAW (capsh/getcap lie under WSL — they can report
-                # cap_net_raw present while the kernel still refuses the open).
-                # Fall back to "root ⇒ available" only if python3 is missing.
-                ec, out, _ = self._ssh.execute(
-                    "id -u; "
-                    "if command -v python3 >/dev/null 2>&1; then "
-                    "python3 -c 'import socket; "
-                    "socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP); "
-                    "print(\"RAW:yes\")' 2>/dev/null || echo RAW:no; "
-                    "elif [ \"$(id -u)\" = 0 ]; then echo RAW:yes; else echo RAW:no; fi",
-                    timeout=TOOL_VERIFY_TIMEOUT)
-                rows = [r.strip() for r in (out or "").splitlines() if r.strip()]
-                if rows:
-                    try:
-                        uid = int(rows[0])
-                    except ValueError:
-                        uid = None
-                    caps["uid"] = uid
-                    caps["root"] = (uid == 0)
-                    caps["raw_socket"] = any("RAW:yes" in r for r in rows)
+                uid = int(rows[0])
+            except ValueError:
+                return None
+            return {"uid": uid, "raw": any("RAW:yes" in r for r in rows)}
+
+        # Context 1 — current euid. Retry ONCE on a failed/empty probe before
+        # giving up, so a transient blip is not mistaken for "no capability".
+        cur = None
+        for _attempt in range(2):
+            try:
+                cur = _probe(as_root=False)
             except Exception as e:
-                self.log.debug(f"capability probe failed: {e}")
+                self.log.debug(f"capability probe attempt {_attempt} failed: {e}")
+                cur = None
+            if cur is not None:
+                break
+        if cur is None:
+            # Genuine probe failure → leave probe_ok False (UNKNOWN). Do NOT
+            # fabricate raw_socket=False; that would hard-reject the working path.
+            self._capabilities_cache = caps
+            return caps
+
+        caps["uid"] = cur["uid"]
+        caps["root"] = (cur["uid"] == 0)
+        caps["raw_socket"] = cur["raw"]
+        caps["probe_ok"] = True
+
+        # Context 2 — MEASURE raw sockets under root, and whether a root path
+        # exists at all (already root, or passwordless sudo works).
+        if caps["root"]:
+            caps["root_path_available"] = True
+            caps["raw_socket_via_root"] = caps["raw_socket"]
+        else:
+            caps["root_path_available"] = False
+            caps["raw_socket_via_root"] = False
+            try:
+                root_probe = _probe(as_root=True)
+                # as_root wraps a non-root user in `sudo -n`; a leading uid of 0
+                # proves the escalation actually ran as root.
+                if root_probe is not None and root_probe["uid"] == 0:
+                    caps["root_path_available"] = True
+                    caps["raw_socket_via_root"] = root_probe["raw"]
+            except Exception as e:
+                self.log.debug(f"root-context capability probe failed: {e}")
+
         self._capabilities_cache = caps
         return caps
+
+    def enforce_capability(self, command: str) -> str:
+        """P1-2 (CAP-2): deterministically make ``command`` runnable at the
+        privilege the environment ACTUALLY provides — keyed on the MEASURED
+        capability probe, never a tool name or a euid guess.
+
+          • strip euid-inert ``--privileged``/``--unprivileged`` (they grant no
+            capability);
+          • raw sockets work directly             → run as-is;
+          • raw sockets work under root (MEASURED) → escalate via ``sudo`` (the
+            tool_manager as_root path runs it as root) — on ``raw_socket_via_root``,
+            NOT the inferred ``root_path_available``;
+          • neither                               → connect_fallback: rewrite the
+            privileged scan modes (``-sS/-sU/-sA/-sF/-sN/-sX``, ``-O``) to the
+            unprivileged ``-sT`` connect scan so an unprivileged box still scans
+            instead of emitting nothing.
+
+        Fail-safe: if the probe did not definitively run (``probe_ok`` False) the
+        command is returned UNCHANGED — the gate acts only on measured facts, so
+        it can never regress an environment it could not measure. Must be applied
+        AFTER stealth routing so the ``sudo`` prefix leads (tool_manager keys its
+        as_root escalation on a leading ``sudo`` token)."""
+        if not command:
+            return command
+        caps = self._probe_capabilities()
+        if not caps.get("probe_ok"):
+            return command  # unmeasured → passthrough (never a hard reject)
+
+        # euid-inert privilege flags never grant a capability — strip both.
+        cmd = re.sub(r'\s*--(?:un)?privileged\b', '', command)
+
+        needs_raw = bool(
+            re.search(r'(?<!\S)-s[SUAFNX]\b', cmd)
+            or re.search(r'(?<!\S)-O\b', cmd))
+        if caps.get("raw_socket") or not needs_raw:
+            # Raw sockets available directly, or the command doesn't need them.
+            return cmd
+
+        if caps.get("raw_socket_via_root"):
+            # Escalate on the MEASURED root-raw capability. If already escalated,
+            # leave it — don't degrade a command that will run fine under root.
+            if cmd.strip().startswith("sudo"):
+                return cmd
+            return f"sudo {cmd}"
+
+        # connect_fallback — no raw sockets anywhere: degrade the privileged scan
+        # modes to the unprivileged TCP-connect scan so we still get a real result.
+        degraded = re.sub(r'(?<!\S)-s[SUAFNX]\b', '-sT', cmd)
+        degraded = re.sub(r'(?<!\S)-O\b\s*', '', degraded).strip()  # OS detect needs root
+        return degraded
+
+    def _command_intent_key(self, command: str, target: str = None) -> str:
+        """THE unified convergence key (§3.6, DEDUP-1 + C3) — the single authority
+        for the failure-reject window, cycle detection, the outcome-verdict cache,
+        and the convergence ledger. Normalizes a command to its INTENT so every
+        surface variant of one logical attempt maps to ONE key, shaped
+        ``primary_tool|host|sorted(significant_flag_names)``. It strips:
+
+          • the wrapper/launcher (proxychains/sudo/env/timeout/nice/torsocks…);
+          • all flag VALUES (only flag NAMES survive);
+          • volatile flags — output (``-o*``/``--output``), verbosity (``-v``/
+            ``--debug``/``--silent``), timing/rate/delay (``-T0-5``/``--max-rate``/
+            ``--scan-delay``/``--jitter``/``--max-time``…);
+          • the evasion mutations the WAF loop injects (the ``proxychains4 -q``
+            prefix and ``--proxy``).
+
+        Keying convergence on this instead of ``sha256(full_command)`` is exactly
+        why the old per-cmd_hash breaker never tripped — each evasion mutation and
+        cache-bust value made the command look brand-new. Deterministic and
+        dependency-free (no AI, no network). Host is taken from the command first
+        (``_extract_host``) then ``target``, so two functions keying the same
+        logical command agree regardless of which passed an explicit target."""
+        raw = (command or "").strip()
+        if not raw:
+            return "∅"
+        try:
+            toks = shlex.split(raw)
+        except Exception:
+            toks = raw.split()
+
+        WRAPPERS = {"proxychains", "proxychains4", "torsocks", "sudo", "env",
+                    "nice", "ionice", "chrt", "taskset", "stdbuf", "unbuffer",
+                    "timeout", "time", "nohup", "setsid"}
+        i = 0
+        while i < len(toks):
+            base = toks[i].rsplit("/", 1)[-1].lower()
+            if base not in WRAPPERS:
+                break
+            i += 1
+            # swallow this wrapper's own flags/operands (env VAR=val, timeout
+            # duration, proxychains -q/-f) up to the next bareword — the tool.
+            while i < len(toks) and (
+                    toks[i].startswith("-")
+                    or "=" in toks[i]
+                    or re.fullmatch(r"\d+[smhd]?", toks[i] or "")):
+                i += 1
+        if i >= len(toks):
+            return "∅"
+
+        primary = toks[i].rsplit("/", 1)[-1].lower()
+        rest = toks[i + 1:]
+        host = re.sub(
+            r'^\w+://', '',
+            (self._extract_host(command) or target or "").strip().lower()
+        ).split("/")[0].split(":")[0]
+
+        VOLATILE = {
+            "-v", "-vv", "-vvv", "--verbose", "-d", "-dd", "--debug",
+            "-q", "--quiet", "--silent",
+            "-o", "--output", "-on", "-ox", "-og", "-oa", "-oj", "-of",
+            "--max-time", "--timeout", "--connect-timeout", "--scan-delay",
+            "--delay", "--max-rate", "--min-rate", "--rate", "--jitter",
+            "--max-retries", "--retries", "--stats-every", "--proxy",
+        }
+        flags = set()
+        for tk in rest:
+            if not (tk.startswith("-") and len(tk) > 1):
+                continue  # operands and flag VALUES are dropped
+            name = tk.split("=", 1)[0].lower()
+            if name in VOLATILE or re.fullmatch(r'-t[0-5]', name):
+                continue  # -T0..-T5 = nmap timing template (volatile)
+            flags.add(name)
+        return f"{primary}|{host}|{','.join(sorted(flags))}"
+
+    def _intent_local_progress(self, host: str) -> int:
+        """P4-3: findings attributable to THIS intent's host — the intent-LOCAL
+        progress signal the convergence breaker measures. Deliberately NOT
+        ``len(self._findings_seen)`` (global): another intent's finding must not
+        read as progress for the doomed one. Dedup keys are
+        ``type::target::evidence::detail``, so we count keys whose target field
+        contains the host."""
+        seen = getattr(self, "_findings_seen", None)
+        if not seen:
+            return 0
+        if not host:
+            return len(seen)
+        h = host.lower()
+        n = 0
+        for key in seen:
+            parts = key.split("::")
+            if len(parts) >= 2 and h in parts[1].lower():
+                n += 1
+        return n
+
+    # Attempts an intent may burn without any intent-local progress before the
+    # convergence breaker abandons it. cmd_hash is the P1-4 intent key, so all
+    # evasion mutations of one logical attempt share this budget.
+    _CONVERGENCE_MAX_ATTEMPTS = 4
+
+    def _convergence_breaker(self, cmd_hash: str, clean_host: str,
+                             tool: str, is_repair: bool) -> tuple[bool, str]:
+        """P4-3: update the intent ledger for this attempt and decide — with NO
+        LLM — whether the intent has converged to failure and must be abandoned.
+
+        Abandon iff the intent has been attempted ``_CONVERGENCE_MAX_ATTEMPTS``
+        times and produced ZERO new findings for its own host since it started
+        (INTENT-LOCAL progress, not global). The strategic advisor, if present, is
+        consulted for the final say via ``should_continue_trying(..., no_progress
+        =True)`` — which returns False authoritatively — but the default is to
+        abandon. --help/repair sub-fetches never count or trip the breaker."""
+        if is_repair:
+            return False, ""
+        ledger = getattr(self, "_intent_ledger", None)
+        if ledger is None:
+            ledger = self._intent_ledger = {}
+        progress = self._intent_local_progress(clean_host)
+        entry = ledger.get(cmd_hash)
+        if entry is None:
+            # First attempt of this intent; no gain yet → stale streak = 1.
+            ledger[cmd_hash] = {"attempts": 1, "progress_at_gain": progress,
+                                "stale_streak": 1}
+            return False, ""
+        entry["attempts"] += 1
+        # Measure staleness since the LAST progress GAIN, not since the intent
+        # first started. The old `progress <= progress_at_start` gave an intent
+        # that scored a single finding early PERMANENT immunity (progress stays
+        # elevated forever, so no_progress was False on every later attempt) — a
+        # live run watched a WAF-blocked `nmap --script http-*` loop emit one
+        # http-title finding, then spin ~90 min re-scanning + escalating evasion
+        # and NEVER abandon. Now: any NEW finding resets the streak; MAX
+        # consecutive attempts with no new finding => abandon, early wins aside.
+        if progress > entry["progress_at_gain"]:
+            entry["progress_at_gain"] = progress
+            entry["stale_streak"] = 0
+            return False, ""
+        entry["stale_streak"] = entry.get("stale_streak", 0) + 1
+        if entry["stale_streak"] < self._CONVERGENCE_MAX_ATTEMPTS:
+            return False, ""
+        cont, why = False, (
+            f"intent made no new progress on {clean_host} over "
+            f"{entry['stale_streak']} consecutive attempts")
+        try:
+            if getattr(self, "advisor", None):
+                cont, why = self.advisor.should_continue_trying(
+                    tool, clean_host, attempts=entry["attempts"],
+                    failure_rate=1.0, no_progress=True)
+        except Exception as _cb_e:
+            self.log.debug(f"[CONVERGENCE] advisor consult failed: {_cb_e}")
+            cont = False
+        return (not cont), why
 
     def _workspace_state_note(self) -> str:
         """List the files that ACTUALLY exist in the workspace right now, so the
@@ -5008,19 +5623,23 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
             # for whatever tool it picks (e.g. a TCP-connect scan instead of a
             # SYN scan), so we never hardcode tool flags.
             cap = self._probe_capabilities()
-            if cap:
+            if cap.get("probe_ok"):
                 lines.append("\n=== EXECUTION PRIVILEGES & CAPABILITIES (live) ===")
                 lines.append(
                     f"  Effective user : {'root' if cap.get('root') else 'NON-root (uid=' + str(cap.get('uid', '?')) + ')'}")
+                # P1-3 (PROSE-1): report the TRUE reachable capability, not a
+                # euid-only snapshot. enforce_capability escalates via sudo when
+                # raw sockets are reachable under root and degrades to an
+                # unprivileged scan otherwise — so we describe what the engine
+                # WILL DO and never forbid a privileged mode it can actually run.
+                if cap.get("raw_socket"):
+                    raw_state = "available"
+                elif cap.get("raw_socket_via_root"):
+                    raw_state = "available via automatic root escalation (engine handles it)"
+                else:
+                    raw_state = "UNAVAILABLE — engine auto-selects the unprivileged equivalent"
                 lines.append(
-                    f"  Raw packet sockets (CAP_NET_RAW): {'available' if cap.get('raw_socket') else 'UNAVAILABLE'}")
-                if not cap.get("raw_socket"):
-                    lines.append(
-                        "  CONSTRAINT: Operations needing raw packets or root WILL fail "
-                        "('Operation not permitted' / 'requires root'). Choose an "
-                        "UNPRIVILEGED equivalent for whatever tool you pick (connect-based "
-                        "scans, userland modes). Do NOT request privileged/raw scan types "
-                        "or --privileged.")
+                    f"  Raw packet sockets (CAP_NET_RAW): {raw_state}")
 
             # ── 1b. Dynamic Performance / Stealth Mandate ─────────────────
             stealth_enabled = False
@@ -5588,3 +6207,78 @@ Option 2 (Fetch): Provide a one-liner bash command to download a highly-relevant
     def _preflight(self) -> tuple[bool, str]:
         """Default preflight: subclasses may override. Returns (can_proceed, reason)."""
         return True, ""
+
+    def _plausible_handoff(
+            self, recon_data: dict) -> tuple[bool, str, dict]:
+        """P0-4 — pre-exploit result-quality + plausibility gate (shared).
+
+        Answers "is there a plausible, real target to exploit here, or is this
+        empty/garbage recon we would only burn the budget on?" No parsed open
+        ports AND no findings → ``(False, reason)``: exploitation MUST NOT run
+        on garbage (closes RC-6, DEEP-5). Deliberately kept exactly as tight as
+        the original open-ports/findings gate — it never *loosens* the handoff.
+
+        TRIPWIRE-1 bound (v1.1): when the port list looks like a honeypot /
+        tarpit flood, the honeypot pruner is consulted ONLY to LOWER CONFIDENCE
+        — the ports it cannot verify live are annotated ``needs_confirmation``,
+        never hard-dropped. Every originally-reported port still reaches
+        exploitation; the Evidence differential is the final arbiter, so a real
+        service sitting behind a honeypot signal is still exploited and
+        measured. The pruner can therefore never silently kill a working path.
+
+        Returns ``(plausible, reason, annotations)`` where ``annotations`` holds
+        ``needs_confirmation_ports`` / ``verified_live_ports`` — hints only,
+        never a filter applied to the handed-off port set.
+        """
+        annotations = {
+            "needs_confirmation_ports": [],
+            "verified_live_ports": [],
+        }
+        rd = recon_data if isinstance(recon_data, dict) else {}
+        open_ports = [
+            int(p) for p in (rd.get("open_ports") or [])
+            if str(p).strip().isdigit()
+        ]
+        try:
+            findings_n = len(
+                self.store.get_all_findings(self.session.engagement_id) or [])
+        except Exception:
+            findings_n = 0
+
+        # Garbage gate: no positive recon signal at all → no handoff (RC-6).
+        if not open_ports and findings_n == 0:
+            return (
+                False,
+                "Recon produced no plausible target (no parsed open ports and no "
+                "findings) — refusing to hand off to exploitation on garbage.",
+                annotations,
+            )
+
+        # TRIPWIRE-1 bound: only a port-flood triggers the (network-probing)
+        # pruner, and it is used only to FLAG suspect ports, never to drop them.
+        try:
+            from config_thresholds import HONEYPOT_PORT_THRESHOLD
+            if open_ports and len(open_ports) >= HONEYPOT_PORT_THRESHOLD:
+                from core.tripwire_detector import TripwireDetector
+                host = re.sub(
+                    r"^https?://", "",
+                    getattr(self.session, "target", "") or "").split(
+                    "/")[0].split(":")[0]
+                if host:
+                    detector = TripwireDetector(
+                        remote_executor=getattr(self, "_ssh", None))
+                    verified = set(
+                        detector.prune_honeypot_ports(host, open_ports))
+                    annotations["verified_live_ports"] = sorted(verified)
+                    annotations["needs_confirmation_ports"] = sorted(
+                        set(open_ports) - verified)
+                    if annotations["needs_confirmation_ports"]:
+                        self.log.info(
+                            f"[P0-4] {len(annotations['needs_confirmation_ports'])} of "
+                            f"{len(open_ports)} reported ports could not be verified live "
+                            "(honeypot/tarpit signal) — flagged needs_confirmation, NOT "
+                            "dropped. The Evidence differential is the final arbiter.")
+        except Exception as _e:
+            self.log.debug(f"[P0-4] honeypot plausibility probe skipped: {_e}")
+
+        return True, "", annotations

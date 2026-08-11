@@ -1,3 +1,6 @@
+# Requires Python 3.12+ (the codebase uses PEP 701 multi-line f-strings, a
+# SyntaxError on 3.11 and earlier). On Ubuntu 22.04/Debian (ships 3.10): install
+# python3.12 via deadsnakes and create the venv with it. main.py enforces this.
 rich>=13.7.0
 requests>=2.31.0
 python-dotenv>=1.0.0

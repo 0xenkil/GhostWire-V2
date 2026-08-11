@@ -6,42 +6,35 @@ import re
 from core.target_context import TargetContext
 from utils.logger import get_logger
 from tools.tool_registry import WRAPPER_TOOLS
+from core.provisioning_policy import is_run_blocked
+from core.capability_registry import tool_primary_capability
 
 log = get_logger("guardian")
 
-# Allowlisted tools for both AI-enhanced recon AND exploitation
-ALLOWED_RECON_TOOLS = {
-    # Recon tools
-    "nmap", "masscan", "dig", "curl", "wget",
-    "sslscan", "whatweb", "nikto", "gobuster", "ffuf",
-    "enum4linux", "sqlmap", "whois", "nc", "netstat",
-    "host", "traceroute", "ping", "mtr", "dnsenum",
-    "fierce", "theHarvester", "assetfinder", "ssltest", "nuclei",
-    "subfinder", "wafw00f", "dirsearch", "dirb", "proxychains4", "proxychains", "httpx",
-    "amass", "katana", "hakrawler", "gau", "waybackurls", "arjun", "paramspider", "dalfox",
-    "feroxbuster", "wfuzz", "kiterunner", "trufflehog", "gitleaks", "smbclient",
-    "smbmap", "crackmapexec", "netexec", "wpscan", "joomscan", "droopescan",
-    "snmpwalk", "snmpcheck", "ldapsearch", "echo", "printf", "dnsrecon", "git", "grep", "jq", "awk", "cut", "tee", "sort", "uniq",
-    "cat", "ls", "test", "id", "whoami", "ip", "ifconfig", "uname", "crontab", "ps", "top", "w", "last", "history", "pwd", "cd", "find", "chown", "chmod",
-    # Wrappers
-    "timeout",
-    # Exploitation tools
-    "hydra", "msfconsole", "john", "sqlmap", "nikto",
-    "curl", "wget", "nmap", "sslscan", "nc",
-    "nessus", "metasploit", "crunch", "python3", "python",
-    "react_payload", "python_payload", "hashcat", "searchsploit", "commix",
-    # Tools advertised by the tool registry / used by the evasion path that
-    # were missing here (advertised-but-blocked drift): curl-impersonate is the
-    # TLS/JA3 evasion binary the WAF-evasion tier rewrites curl onto; playwright
-    # / tor are launched internally. Keep this a superset of the registry.
-    "curl-impersonate", "playwright", "tor",
-}
+# P2-2 (GUARDIAN-ALLOWLIST-1): the ALLOWED_RECON_TOOLS allowlist is GONE. It was
+# the autonomy limiter — it blocked every modern recon tool nobody had
+# pre-registered (the "Tool X not allowlisted" reject). Safety is now a
+# deny+scope gate: the destructive-verb RUN_DENY list (core.provisioning_policy)
+# + the pattern rails + the target-scope check + the length cap below. Any
+# non-destructive, in-scope tool the AI picks is allowed.
 
-# Case-insensitive view for the allowlist check — the registry advertises some
-# tools lowercased (e.g. "theharvester") while the canonical binary is mixed-case
-# ("theHarvester"); a case-sensitive check blocked the lowercase form. Comparing
-# on .lower() removes this whole class of casing drift.
-_ALLOWED_RECON_TOOLS_LOWER = {t.lower() for t in ALLOWED_RECON_TOOLS}
+# Launcher/wrapper prefixes and value-assignments that legitimately begin a
+# command line — used only to anchor prose/markdown command extraction, never as
+# an allow/deny authority.
+_LINE_LEADERS = {"export", "sudo", "timeout", "env", "nice",
+                 "proxychains4", "proxychains"}
+
+
+def _is_known_or_leader(first_word: str) -> bool:
+    """Heuristic anchor for pulling a command line out of prose/markdown: a token
+    that is a KNOWN tool binary (capability registry), a ``VAR=val`` assignment,
+    or a recognized launcher prefix. Not an allow/deny gate — unknown tools are
+    still executable, they just don't anchor prose extraction."""
+    if not first_word:
+        return False
+    if "=" in first_word or first_word in _LINE_LEADERS:
+        return True
+    return bool(tool_primary_capability(first_word))
 
 # Blocked patterns (destructive, write, exec, etc.)
 # Relaxed for active red teaming
@@ -84,9 +77,11 @@ def validate_ai_command(command: str, target: str,
         # If output contains newline with prose before a command line
         lines = [line.strip() for line in command.splitlines() if line.strip()]
         for line in lines:
-            # Pick first line that starts with a valid binary or environment variable
+            # Pick first line that starts with a known tool, a VAR=val, or a
+            # launcher prefix (P2-2: anchored on the capability registry, not the
+            # deleted allowlist).
             first_word = line.split()[0] if line.split() else ""
-            if first_word.lower() in _ALLOWED_RECON_TOOLS_LOWER or "=" in first_word or first_word in ["export", "sudo", "timeout"]:
+            if _is_known_or_leader(first_word):
                 command = line
                 break
 
@@ -191,9 +186,11 @@ def validate_ai_command(command: str, target: str,
     elif tool_name in host_tools:
         preferred_target = normalized_host
 
-    # 3. Check tool is allowlisted (case-insensitive — see _ALLOWED_*_LOWER)
-    if tool_name.lower() not in _ALLOWED_RECON_TOOLS_LOWER:
-        return False, f"Tool '{tool_name}' not allowlisted", ""
+    # 3. Deny only genuinely destructive binaries (P2-2: deny+scope replaces the
+    # allowlist). Any other tool the AI picks is allowed — the target-scope check
+    # (step 4) and the pattern/length rails are what keep it safe.
+    if is_run_blocked(tool_name):
+        return False, f"Tool '{tool_name}' is on the destructive run-deny list", ""
 
     # 4. Target scoping check - relaxed for complex commands, uses normalized
     # target

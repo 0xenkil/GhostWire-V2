@@ -394,7 +394,23 @@ class WafBypassOrchestrator:
         test_allowed = tst.status_code not in blocked_codes
         note = (f"control={ctrl.status_code} (blocked={ctrl_blocked}), "
                 f"test={tst.status_code} (allowed={test_allowed})")
-        if ctrl_blocked and test_allowed:
+        # P5-5: route the verdict through the hardened Evidence.is_proven so a
+        # "confirmed bypass" is a MEASURED differential, not an ad-hoc bool. The
+        # bypass signal is the STATUS differential (control BLOCKED → test
+        # ALLOWED), encoded as a differential Evidence exactly like _time_delta
+        # encodes a timing differential (similarity 0.0 = convincing, 0.99 = not).
+        from core.result_contracts import Evidence
+        from intelligence.waf_bypass.technique import confirmed_bypass
+        ev = Evidence(
+            proof_type="differential",
+            reproducible_command=f"GET {probe_path} (control vs bypass)",
+            request=test,
+            response_excerpt=(getattr(tst, "text", "") or "")[:2000],
+            baseline_excerpt=(getattr(ctrl, "text", "") or "")[:1000],
+            differential=note,
+            similarity_to_baseline=0.0 if (ctrl_blocked and test_allowed) else 0.99,
+        )
+        if confirmed_bypass(ev):
             return True, "differential confirmed: " + note
         return False, "no differential: " + note
 

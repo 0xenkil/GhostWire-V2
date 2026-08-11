@@ -12,6 +12,8 @@ Zero hardcoding: All decisions driven by accumulated knowledge from previous eng
 """
 
 import json
+import os
+import threading
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timezone
@@ -20,6 +22,12 @@ from collections import defaultdict
 
 class StrategicAdvisor:
     """AI-driven strategic advisor that learns from every engagement."""
+
+    # P3-4 (ADVISOR-NONATOMIC-SAVE): every agent builds its own StrategicAdvisor
+    # pointing at the SAME strategic_knowledge.json, so concurrent saves raced and
+    # a non-atomic write could truncate the file. One process-wide lock serializes
+    # writers; the write itself is atomic (temp + os.replace).
+    _save_lock = threading.Lock()
 
     def __init__(self, state_store=None, ai_backend=None,
                  knowledge_dir: str = None):
@@ -58,9 +66,11 @@ class StrategicAdvisor:
         }
 
     def _save_knowledge_base(self):
-        """Persist knowledge to disk."""
+        """Persist knowledge to disk ATOMICALLY (P3-4). Convert defaultdicts to
+        regular dicts, serialize once, then temp-write + os.replace under a
+        process-wide lock so concurrent agent writers can never truncate or
+        interleave into a corrupt strategic_knowledge.json."""
         kb_file = self.knowledge_dir / "strategic_knowledge.json"
-        # Convert defaultdicts to regular dicts for JSON serialization
         kb_serializable = {
             "tool_effectiveness": dict(self.knowledge_base["tool_effectiveness"]),
             "tech_stack_patterns": self.knowledge_base["tech_stack_patterns"],
@@ -70,7 +80,12 @@ class StrategicAdvisor:
             "discovery_patterns": self.knowledge_base["discovery_patterns"],
             "engagement_summaries": self.knowledge_base["engagement_summaries"],
         }
-        kb_file.write_text(json.dumps(kb_serializable, indent=2))
+        payload = json.dumps(kb_serializable, indent=2)
+        with StrategicAdvisor._save_lock:
+            tmp = str(kb_file) + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                f.write(payload)
+            os.replace(tmp, str(kb_file))
 
     def set_engagement_context(
             self, engagement_id: str, target: str, tech_stack: List[str] = None):
@@ -381,11 +396,22 @@ Output JSON:
         return {"discovery_sequence": fb} if full else fb
 
     def should_continue_trying(self, tool: str, target: str, attempts: int,
-                               failure_rate: float) -> tuple[bool, str]:
+                               failure_rate: float,
+                               no_progress: bool = False) -> tuple[bool, str]:
         """
         Intelligent decision: should we keep trying this tool or pivot?
         Based on historical success rates and current failure pattern.
+
+        P4-3: ``no_progress`` is the AUTHORITATIVE convergence signal from the
+        base_agent intent ledger (the intent burned its attempt budget without
+        producing a single finding for its own host). When set with >=3 attempts
+        it returns False unconditionally — the loop breaks with NO LLM, ending the
+        403→rotate→403 cascade regardless of historical rates.
         """
+        if no_progress and attempts >= 3:
+            return False, (
+                f"No intent-local progress after {attempts} attempts — "
+                "converged to failure; pivot.")
         tool_history = self.knowledge_base["tool_effectiveness"].get(tool, {})
 
         # Query knowledge base
@@ -470,11 +496,22 @@ Output JSON:
             if waf_key not in self.knowledge_base["waf_bypass_tactics"]:
                 self.knowledge_base["waf_bypass_tactics"][waf_key] = []
 
+            _known = {t.get("tactic") for t in
+                      self.knowledge_base["waf_bypass_tactics"][waf_key]
+                      if isinstance(t, dict)}
             for tactic in waf_tactics_used:
-                if tactic not in self.knowledge_base["waf_bypass_tactics"][waf_key]:
+                # P3-4 (ADVISOR-WAF-ALLTRUE): a tactic being USED is not a tactic
+                # that WORKED. The old code hardcoded success:True for every used
+                # tactic, fabricating a 100% success rate. Record attempted-UNKNOWN
+                # (None, matching record_waf_detection); the real per-tactic outcome
+                # is computed by the WafLearner batch path (P3-3) from measured
+                # tool runs, never asserted here. (Dedup also fixed: the old
+                # `tactic not in [list-of-dicts]` never matched, duplicating rows.)
+                if tactic not in _known:
+                    _known.add(tactic)
                     self.knowledge_base["waf_bypass_tactics"][waf_key].append({
                         "tactic": tactic,
-                        "success": True,
+                        "success": None,  # attempted; resolved by the WafLearner
                         "timestamp": datetime.now(timezone.utc).isoformat()
                     })
 

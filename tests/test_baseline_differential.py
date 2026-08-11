@@ -44,17 +44,27 @@ def test_differential_gate_rejects_identical_to_baseline():
     assert e2.is_proven() is True
 
 
-def test_artifact_and_oob_bypass_similarity():
+def test_artifact_and_oob_require_measurement():
     from core.result_contracts import Evidence
-    # Self-proving artifact/OOB confirm even when the response equals baseline.
-    assert Evidence(proof_type="artifact", similarity_to_baseline=1.0).is_proven() is True
-    assert Evidence(proof_type="oob", similarity_to_baseline=1.0).is_proven() is True
+    # P0-1: self-proving artifact/OOB confirm even when the response equals the
+    # baseline — but ONLY when the measurement is present (control-absent +
+    # test-present for artifacts, a real observed token for OOB). proof_type
+    # alone is not enough — that was the forgery hole.
+    assert Evidence(proof_type="artifact", similarity_to_baseline=1.0,
+                    control_absent=True, test_present=True).is_proven() is True
+    assert Evidence(proof_type="artifact").is_proven() is False
+    assert Evidence(proof_type="oob", similarity_to_baseline=1.0,
+                    oob_token="uniq.oob.example").is_proven() is True
+    assert Evidence(proof_type="oob").is_proven() is False
 
 
-def test_no_baseline_sentinel_trusts_described_delta():
+def test_unmeasured_differential_is_a_lead_not_proof():
     from core.result_contracts import Evidence
-    # When recon captured no body, similarity is the -1.0 sentinel; a described
-    # differential is trusted (can't measure), matching prior behaviour.
+    # P0-1 (deliberate contract change): when recon captured no baseline body,
+    # similarity is the -1.0 sentinel and the differential is UNMEASURED. The old
+    # behaviour trusted the AI-described delta ("proven") — a forgery hole — so an
+    # unmeasured differential is now a LEAD, not proof. Proof requires a real
+    # 0.0 <= similarity < 0.97 measurement.
     e = Evidence(proof_type="differential", differential="described delta",
                  similarity_to_baseline=-1.0)
-    assert e.is_proven() is True
+    assert e.is_proven() is False

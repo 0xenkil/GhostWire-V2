@@ -37,6 +37,16 @@ def _fake(ai):
     f = types.SimpleNamespace()
     f.ai = ai
     f.log = logging.getLogger("t")
+    # P1-5: _interpret_outcome now keys its verdict cache on the unified intent
+    # key (intent | status | exit_code | full-error fingerprint). The real method
+    # lives on BaseAgent; this minimal fake `self` supplies a stable stand-in so
+    # the triage contract below still exercises the AI path (not the safe-default
+    # except branch).
+    f._command_intent_key = lambda command, target=None: command
+    # P4-2: triage now checks the token-budget gate before spending an LLM call.
+    # These tests pin the triage REASONING contract (budget is a separate axis,
+    # covered by test_p4_budget_gate), so stand in an always-affordable gate.
+    f._afford_llm = lambda kind: True
     return f
 
 

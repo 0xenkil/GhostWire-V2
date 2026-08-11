@@ -359,12 +359,20 @@ class RuleGenerator:
         return output_file
 
     def merge_rules_to_system(
-            self, rules_package: Dict[str, Any], confidence_threshold: float = 0.8) -> Dict[str, int]:
+            self, rules_package: Dict[str, Any], truth_gate=None) -> Dict[str, int]:
         """
-        Merge generated rules into system rule files
-        (Only if confidence > threshold)
+        Merge generated rules into system rule files — ONLY those a TruthGate
+        admits.
 
-        Returns count of rules merged per type
+        P3-6 (RULEGEN-MERGE-DEAD): the old 0.8 *confidence* threshold let a rule
+        the AI merely felt confident about rewrite the system. The gate is now
+        proof, not self-assessed confidence: each rule_type's rules are merged
+        only if ``truth_gate.supports`` admits the change. No gate → merge
+        NOTHING (fail-closed) — the loop stays open (wire a TruthGate built from a
+        cross-engagement proven-outcome ledger to re-enable), but it can never
+        self-modify on an unproven signal.
+
+        Returns count of rules merged per type.
         """
         merged_count = {
             "exploitation": 0,
@@ -372,18 +380,21 @@ class RuleGenerator:
             "recon": 0,
             "weaponization": 0
         }
+        if truth_gate is None:
+            return merged_count  # fail-closed: no proof authority → no merge
 
         for rule_type in merged_count.keys():
             rules = rules_package.get("rules", {}).get(rule_type, [])
-
-            # Filter by confidence
-            high_confidence_rules = [
-                r for r in rules if r.get("confidence", 0) >= confidence_threshold
-            ]
-
-            if high_confidence_rules:
-                self._append_to_rule_file(rule_type, high_confidence_rules)
-                merged_count[rule_type] = len(high_confidence_rules)
+            if not rules:
+                continue
+            try:
+                admitted = truth_gate.supports({"rule_type": rule_type,
+                                                "rules": rules})
+            except Exception:
+                admitted = False
+            if admitted:
+                self._append_to_rule_file(rule_type, rules)
+                merged_count[rule_type] = len(rules)
 
         return merged_count
 
@@ -408,26 +419,63 @@ class RuleGenerator:
             return
 
         try:
-            # Load existing rules
-            existing_rules = []
+            # P3-6 (RULEGEN-APPEND-LATENT): load existing content and REMEMBER its
+            # shape. The live rule files are CONFIG DICTS (web_ports, timeouts, …)
+            # with NO "rules" key — the old code did `content.get("rules", [])` →
+            # [], appended, then wrote back a BARE LIST, obliterating the entire
+            # config. Now: rules live under the dict's "rules" list (every other
+            # config key preserved), or stay a bare list for a legacy list-file.
+            content = None
             if os.path.exists(rule_file):
                 try:
                     with open(rule_file, "r") as f:
                         content = json.load(f)
-                        # Handle both list and dict formats
-                        existing_rules = content if isinstance(
-                            content, list) else content.get("rules", [])
                 except Exception as _e:
                     import logging
                     logging.getLogger(__name__).debug(
                         f'Swallowed exception in rule_generator.py: {_e}')
+                    content = None
 
-            # Append new rules
-            updated_rules = existing_rules + rules
+            is_dict_shape = isinstance(content, dict)
+            if is_dict_shape:
+                existing_rules = content.get("rules", [])
+                if not isinstance(existing_rules, list):
+                    existing_rules = []
+            elif isinstance(content, list):
+                existing_rules = content
+            else:
+                existing_rules = []
 
-            # Save back
-            with open(rule_file, "w") as f:
-                json.dump(updated_rules, f, indent=2)
+            # id-dedup: a re-run must UPDATE a rule with the same id, not append a
+            # duplicate. Preserve first-seen order; id-less rules are appended once.
+            merged, by_id, seen_idless = [], {}, set()
+            for r in existing_rules + list(rules):
+                rid = r.get("id") if isinstance(r, dict) else None
+                if rid is not None:
+                    if rid in by_id:
+                        merged[by_id[rid]] = r  # later wins (the fresh rule)
+                    else:
+                        by_id[rid] = len(merged)
+                        merged.append(r)
+                else:
+                    key = json.dumps(r, sort_keys=True, default=str)
+                    if key not in seen_idless:
+                        seen_idless.add(key)
+                        merged.append(r)
+
+            # Reassemble preserving the ORIGINAL shape (never clobber config keys).
+            if is_dict_shape:
+                content["rules"] = merged
+                payload = content
+            else:
+                payload = merged
+
+            # Atomic write: temp in the same dir + os.replace, so a crash mid-write
+            # can never leave a truncated/corrupt rule file.
+            tmp = rule_file + ".tmp"
+            with open(tmp, "w") as f:
+                json.dump(payload, f, indent=2)
+            os.replace(tmp, rule_file)
         finally:
             try:
                 os.rmdir(lock_dir)

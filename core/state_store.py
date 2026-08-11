@@ -2,12 +2,37 @@ import sqlite3
 import json
 import threading
 import queue
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from config_thresholds import DB_CONNECTION_TIMEOUT as DB_TIMEOUT
 from utils.logger import get_logger
 
 log = get_logger("state_store")
+
+# ── STATE-1 (P0-0a): durable, *acknowledged* write guarantees ───────────────
+# ProofLedger.stamp() and every learning write route through the single-writer
+# queue below. A silent drop here would demote a genuinely-proven finding (a
+# safe direction) but — worse — a *false* acknowledgement would let a caller
+# believe a row failed to land while it lands later, corrupting the trust
+# guarantee the whole Evidence spine depends on. These constants + the typed
+# error make the ack path the durability boundary: a write either commits and
+# _submit_write returns True, or it raises StateWriteError. It NEVER returns
+# success on an uncommitted write.
+#
+# The ack wait must outlive a worst-case SQLite busy-timeout so a slow-but-
+# succeeding write is not falsely reported as failed; a genuinely wedged/dead
+# writer is caught immediately by the liveness guard instead.
+WRITE_ACK_TIMEOUT = max(45.0, DB_TIMEOUT + 15.0)   # ≥ busy-timeout + margin
+WRITE_MAX_RETRIES = 3                               # bounded retry on transient locks
+WRITE_RETRY_BACKOFF = 0.2                           # seconds, linear per attempt
+
+
+class StateWriteError(RuntimeError):
+    """Raised when a state-store write could not be durably acknowledged.
+
+    Subclasses RuntimeError so existing ``except RuntimeError`` callers still
+    catch what used to be a bare RuntimeError timeout."""
 
 
 class StateStore:
@@ -31,6 +56,13 @@ class StateStore:
                 isolation_level=None)
 
         self.conn.execute("PRAGMA journal_mode=WAL")
+
+        # P5-12 (CONCURRENCY-1): the SINGLE read connection `self.conn` is used by
+        # many agent threads. sqlite3 connections are not safe for truly-concurrent
+        # use (check_same_thread=False only disables the CHECK), so all direct reads
+        # serialize through this lock. Writes already serialize via the queue.
+        import threading as _threading
+        self._read_lock = _threading.RLock()
 
         # Setup background writer thread
         self.write_queue = queue.Queue()
@@ -74,40 +106,106 @@ class StateStore:
             try:
                 task = self.write_queue.get()
                 if task is None:
+                    # STATE-1: checkpoint the WAL on the writer connection (the
+                    # one that actually appended the frames) before shutting it
+                    # down, so a clean close leaves no committed-but-unflushed
+                    # data stranded in the -wal sidecar.
+                    try:
+                        write_conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                    except Exception as _ce:
+                        log.debug(f"Shutdown WAL checkpoint skipped: {_ce}")
                     write_conn.close()
                     self.write_queue.task_done()
                     break
                 try:
-                    if task.get('is_script'):
-                        write_conn.executescript(task['payload'])
-                    elif isinstance(task['payload'], list):
-                        for q, p in task['payload']:
-                            write_conn.execute(q, p)
-                    else:
-                        q, p = task['payload']
-                        write_conn.execute(q, p)
-                    write_conn.commit()
+                    self._run_write(write_conn, task)
                 except Exception as e:
-                    write_conn.rollback()
+                    # STATE-1: record the failure FIRST, then attempt rollback
+                    # defensively. If rollback itself raises, the caller must
+                    # still see the original error — never a false "landed".
                     task['error'] = e
+                    try:
+                        write_conn.rollback()
+                    except Exception as _re:
+                        log.error(f"Rollback failed after write error: {_re}")
                 finally:
                     task['event'].set()
                     self.write_queue.task_done()
             except Exception as e:
                 log.error(f"Writer loop error: {e}")
 
-    def _submit_write(self, payload, is_script=False):
+    def _run_write(self, write_conn, task):
+        """Execute one queued write, committing atomically, with a bounded
+        retry on transient SQLite lock/busy errors.
+
+        STATE-1: either the write commits (``task['error']`` stays None) or this
+        raises — the writer never reports a partial/uncommitted write as done.
+        Every queued statement is idempotent (INSERT OR IGNORE / OR REPLACE /
+        UPSERT / CREATE IF NOT EXISTS), so re-running after a rolled-back
+        transient failure cannot create a phantom or duplicate row."""
+        attempt = 0
+        while True:
+            try:
+                payload = task['payload']
+                if task.get('is_script'):
+                    write_conn.executescript(payload)
+                elif isinstance(payload, list):
+                    cur = None
+                    for q, p in payload:
+                        cur = write_conn.execute(q, p)
+                    if cur is not None:
+                        task['lastrowid'] = cur.lastrowid
+                else:
+                    q, p = payload
+                    cur = write_conn.execute(q, p)
+                    # P0-10: expose the AUTOINCREMENT rowid so an acknowledged
+                    # INSERT can hand its id back to the caller (tool_run linkage).
+                    task['lastrowid'] = cur.lastrowid
+                write_conn.commit()
+                return
+            except sqlite3.OperationalError as e:
+                msg = str(e).lower()
+                transient = ('locked' in msg) or ('busy' in msg)
+                attempt += 1
+                if not transient or attempt > WRITE_MAX_RETRIES:
+                    raise
+                try:
+                    write_conn.rollback()
+                except Exception:
+                    pass
+                backoff = WRITE_RETRY_BACKOFF * attempt
+                log.warning(
+                    f"Transient write lock ({e}); retry {attempt}/{WRITE_MAX_RETRIES} "
+                    f"in {backoff:.2f}s")
+                time.sleep(backoff)
+
+    def _submit_write(self, payload, is_script=False, return_id=False):
+        # STATE-1: dead-writer guard — if the single writer thread is not
+        # running, the row can never land; fail loudly instead of enqueuing
+        # into a void and blocking the caller for the full ack timeout.
+        if not (getattr(self, 'writer_thread', None) and self.writer_thread.is_alive()):
+            raise StateWriteError(
+                "state store writer thread is not running; write cannot be acknowledged")
         task = {
             'payload': payload,
             'is_script': is_script,
             'event': threading.Event(),
-            'error': None
+            'error': None,
+            'lastrowid': None,
         }
         self.write_queue.put(task)
-        if not task['event'].wait(timeout=10.0):
-            raise RuntimeError("State store write operation timed out")
+        if not task['event'].wait(timeout=WRITE_ACK_TIMEOUT):
+            # NOT acknowledged within budget: callers must treat the row as
+            # un-landed. Because every queued statement is idempotent, a late
+            # replay cannot create a phantom/duplicate — the ledger's proof id
+            # is content-addressed for exactly this reason.
+            raise StateWriteError(
+                f"state store write not acknowledged within {WRITE_ACK_TIMEOUT}s")
         if task['error']:
             raise task['error']
+        # P0-10: return_id lets an acknowledged single-INSERT hand back its
+        # AUTOINCREMENT rowid; the default keeps the historical `True` contract.
+        return task['lastrowid'] if return_id else True
 
     def _init_schema(self):
         self._submit_write("""
@@ -150,6 +248,11 @@ class StateStore:
                 detail TEXT,
                 severity TEXT DEFAULT 'info',
                 timestamp TEXT,
+                -- P0-10: the tool_runs.id whose output produced this finding, so
+                -- Phase-3 learning can join a finding to its exact originating run
+                -- (not a target-fuzzy guess). NULL when the finding has no single
+                -- originating tool run (e.g. an AI-reasoned or cross-run finding).
+                tool_run_id INTEGER,
                 UNIQUE(engagement_id, finding_type, target, detail)
             );
             CREATE TABLE IF NOT EXISTS messages (
@@ -190,22 +293,10 @@ class StateStore:
                 updated_at TEXT,
                 PRIMARY KEY(engagement_id, node_type, node_key)
             );
-            CREATE TABLE IF NOT EXISTS graph_nodes (
-                engagement_id TEXT NOT NULL,
-                key TEXT NOT NULL,
-                type TEXT NOT NULL,
-                attributes TEXT NOT NULL,
-                PRIMARY KEY(engagement_id, key)
-            );
-            CREATE TABLE IF NOT EXISTS graph_edges (
-                engagement_id TEXT NOT NULL,
-                source TEXT,
-                target TEXT,
-                rel_type TEXT,
-                PRIMARY KEY (engagement_id, source, target, rel_type),
-                FOREIGN KEY(engagement_id, source) REFERENCES graph_nodes(engagement_id, key),
-                FOREIGN KEY(engagement_id, target) REFERENCES graph_nodes(engagement_id, key)
-            );
+            -- P5-8 (D-WIRE-1): graph_nodes/graph_edges tables removed. They backed
+            -- the write-only AttackGraph (populated per finding, never read in
+            -- production) which is deleted. The live evidence_graph table above is
+            -- a SEPARATE, consumed system and stays.
             CREATE TABLE IF NOT EXISTS learning (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 engagement_id TEXT NOT NULL,
@@ -228,7 +319,30 @@ class StateStore:
                 UNIQUE(engagement_id, target, service, username, password)
             );
             CREATE UNIQUE INDEX IF NOT EXISTS idx_failure_patterns_unique ON failure_patterns(engagement_id, agent_id, tool, error_type);
+            CREATE TABLE IF NOT EXISTS proof_ledger (
+                engagement_id TEXT NOT NULL,
+                evidence_id TEXT NOT NULL,
+                proof_type TEXT,
+                evidence_json TEXT NOT NULL,
+                vuln_class TEXT,
+                title TEXT,
+                severity TEXT,
+                created_at TEXT,
+                PRIMARY KEY(engagement_id, evidence_id)
+            );
         """, is_script=True)
+        # P0-10 migration: older DBs predate the findings.tool_run_id column.
+        # ADD COLUMN is a no-op-safe forward migration (nullable, no default
+        # rewrite); guard on PRAGMA table_info so a re-run doesn't error.
+        try:
+            cols = {
+                r[1] for r in self.conn.execute(
+                    "PRAGMA table_info(findings)").fetchall()}
+            if "tool_run_id" not in cols:
+                self._submit_write(
+                    ("ALTER TABLE findings ADD COLUMN tool_run_id INTEGER", ()))
+        except Exception as _mig_err:
+            log.warning(f"[P0-10] findings.tool_run_id migration skipped: {_mig_err}")
         self._initialized.set()
 
     def set_phase_status(self, engagement_id: str,
@@ -249,32 +363,38 @@ class StateStore:
     def log_tool_run(self, engagement_id: str, phase: str, tool: str,
                      command: str, status: str, stdout: str, stderr: str,
                      exit_code: int, duration: float, evasion_applied: str = None):
+        """Persist one tool run and return its AUTOINCREMENT ``id`` (P0-10), so
+        the caller can stamp findings produced from this run with an EXACT
+        originating-run link. Returns None only if the acknowledged write could
+        not report a rowid."""
         self._wait_for_init()
-        self._submit_write(
+        return self._submit_write(
             ("""INSERT INTO tool_runs
                (engagement_id, phase, tool, command, status, stdout, stderr, exit_code, duration_sec, evasion_applied, timestamp)
                VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
              (engagement_id, phase, tool, command, status,
               (stdout or "")[:50000], (stderr or "")[:10000], exit_code, duration, evasion_applied,
-              datetime.now(timezone.utc).isoformat()))
+              datetime.now(timezone.utc).isoformat())),
+            return_id=True
         )
 
     def get_tool_runs(self, engagement_id: str) -> list:
         self._wait_for_init()
         rows = self.conn.execute(
-            """SELECT phase, tool, command, status, stdout, stderr, exit_code, duration_sec, evasion_applied, timestamp
+            """SELECT id, phase, tool, command, status, stdout, stderr, exit_code, duration_sec, evasion_applied, timestamp
                FROM tool_runs WHERE engagement_id=? ORDER BY timestamp""",
             (engagement_id,)
         ).fetchall()
         return [
-            dict(phase=r[0], tool=r[1], command=r[2], status=r[3],
-                 stdout=r[4], stderr=r[5], exit_code=r[6],
-                 duration=r[7], evasion_applied=r[8], timestamp=r[9])
+            dict(id=r[0], phase=r[1], tool=r[2], command=r[3], status=r[4],
+                 stdout=r[5], stderr=r[6], exit_code=r[7],
+                 duration=r[8], evasion_applied=r[9], timestamp=r[10])
             for r in rows
         ]
 
     def add_finding(self, engagement_id: str, phase: str, finding_type: str,
-                    target: str, detail: str, severity: str = "info", agent_id: str = "unknown"):
+                    target: str, detail: str, severity: str = "info", agent_id: str = "unknown",
+                    tool_run_id: int = None):
         if not detail or not str(detail).strip():
             log.warning(
                 f"Dropping malformed finding: empty detail for {finding_type} on {target}")
@@ -288,28 +408,94 @@ class StateStore:
 
         self._wait_for_init()
         detail_key = detail[:120]
-        existing = self.conn.execute(
-            """SELECT id FROM findings
-               WHERE engagement_id=? AND finding_type=? AND target=?
-               AND SUBSTR(detail, 1, 120)=?""",
-            (engagement_id, finding_type, target, detail_key)
-        ).fetchone()
+        # P5-12: serialize the dedup read on the shared connection AND make it
+        # FAIL-SAFE — a transient lock/read error must never DROP the finding
+        # (the old code let the exception propagate and lost the write entirely).
+        # On any read failure we skip dedup and proceed to the queued INSERT OR
+        # IGNORE, so correctness = the write is never silently lost.
+        existing = None
+        try:
+            with self._read_lock:
+                existing = self.conn.execute(
+                    """SELECT id FROM findings
+                       WHERE engagement_id=? AND finding_type=? AND target=?
+                       AND SUBSTR(detail, 1, 120)=?""",
+                    (engagement_id, finding_type, target, detail_key)
+                ).fetchone()
+        except Exception as _dedup_err:
+            log.debug(
+                f"finding dedup read failed (proceeding to write, not dropping): {_dedup_err}")
         if existing:
             log.debug(
                 f"DB dedup: skipping duplicate finding [{finding_type}] {detail_key[:50]}")
             return
+        # P0-10: tool_run_id links this finding to the exact tool run that
+        # produced it (NULL when there is no single originating run).
         self._submit_write(
             ("""INSERT OR IGNORE INTO findings
-               (engagement_id, agent_id, phase, finding_type, target, detail, severity, timestamp)
-               VALUES (?,?,?,?,?,?,?,?)""",
+               (engagement_id, agent_id, phase, finding_type, target, detail, severity, timestamp, tool_run_id)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
              (engagement_id, agent_id, phase, finding_type, target, detail, severity,
+              datetime.now(timezone.utc).isoformat(), tool_run_id))
+        )
+
+    def stamp_proof(self, engagement_id: str, evidence_id: str, proof_type: str,
+                    evidence_json: str, vuln_class: str = "", title: str = "",
+                    severity: str = ""):
+        """P0-2: persist one ProofLedger row. INSERT OR IGNORE on
+        (engagement_id, evidence_id) makes it idempotent — the id is
+        content-addressed, so a re-stamp or a STATE-1 late-write replay of the
+        SAME measured evidence is a no-op, never a duplicate. Routed through the
+        single-writer queue (no KV read-modify-write lost updates)."""
+        self._wait_for_init()
+        self._submit_write(
+            ("""INSERT OR IGNORE INTO proof_ledger
+                (engagement_id, evidence_id, proof_type, evidence_json, vuln_class, title, severity, created_at)
+                VALUES (?,?,?,?,?,?,?,?)""",
+             (engagement_id, evidence_id, proof_type, evidence_json,
+              vuln_class, title, severity,
               datetime.now(timezone.utc).isoformat()))
         )
+
+    def get_proof(self, engagement_id: str, evidence_id: str) -> dict | None:
+        """P0-2: resolve a persisted Evidence dict by its content-addressed id."""
+        self._wait_for_init()
+        row = self.conn.execute(
+            "SELECT evidence_json FROM proof_ledger WHERE engagement_id=? AND evidence_id=?",
+            (engagement_id, evidence_id)
+        ).fetchone()
+        if not row:
+            return None
+        try:
+            return json.loads(row[0])
+        except Exception as e:
+            log.error(f"Failed to parse proof_ledger row {evidence_id}: {e}")
+            return None
+
+    def get_evidence_objects(self, engagement_id: str) -> list:
+        """P0-2: reporting-format evidence list read ATOMICALLY from the ledger
+        table (no KV read-modify-write). Mirrors the legacy
+        {vuln_class,title,severity,evidence} shape reporting._export_pocs wants."""
+        self._wait_for_init()
+        rows = self.conn.execute(
+            """SELECT vuln_class, title, severity, evidence_json
+               FROM proof_ledger WHERE engagement_id=? ORDER BY created_at""",
+            (engagement_id,)
+        ).fetchall()
+        out = []
+        for r in rows:
+            try:
+                ev = json.loads(r[3]) if r[3] else {}
+            except Exception:
+                ev = {}
+            out.append({"vuln_class": r[0], "title": r[1],
+                        "severity": r[2], "evidence": ev})
+        return out
 
     def get_all_findings(self, engagement_id: str) -> list:
         self._wait_for_init()
         rows = self.conn.execute(
-            "SELECT phase, finding_type, target, detail, severity, timestamp FROM findings WHERE engagement_id=? ORDER BY timestamp",
+            "SELECT phase, finding_type, target, detail, severity, timestamp, tool_run_id FROM findings WHERE engagement_id=? ORDER BY timestamp",
             (engagement_id,)
         ).fetchall()
 
@@ -325,7 +511,8 @@ class StateStore:
                     target=r[2],
                     detail=detail.strip(),
                     severity=r[4],
-                    timestamp=r[5]))
+                    timestamp=r[5],
+                    tool_run_id=r[6]))  # P0-10: exact originating-run link (may be None)
         return valid_findings
 
     def has_findings(self, engagement_id: str, phase: str) -> bool:
@@ -609,52 +796,10 @@ class StateStore:
                                attributes=attrs, updated_at=r[3]))
         return result
 
-    def add_graph_node(self, engagement_id: str, key: str,
-                       node_type: str, attributes: dict):
-        self._wait_for_init()
-        attrs = json.dumps(attributes, default=str)
-        self._submit_write(
-            ("""INSERT OR REPLACE INTO graph_nodes (engagement_id, key, type, attributes)
-               VALUES (?, ?, ?, ?)""",
-             (engagement_id, key, node_type, attrs))
-        )
-
-    def add_graph_edge(self, engagement_id: str, source: str,
-                       target: str, rel_type: str):
-        self._wait_for_init()
-        self._submit_write(
-            ("""INSERT OR IGNORE INTO graph_edges (engagement_id, source, target, rel_type)
-               VALUES (?, ?, ?, ?)""",
-             (engagement_id, source, target, rel_type))
-        )
-
-    def get_graph_node(self, engagement_id: str, key: str) -> dict | None:
-        self._wait_for_init()
-        row = self.conn.execute(
-            "SELECT type, attributes FROM graph_nodes WHERE engagement_id=? AND key=?",
-            (engagement_id, key)
-        ).fetchone()
-        if row:
-            try:
-                attrs = json.loads(row[1]) if row[1] else {}
-            except Exception as e:
-                log.error(
-                    f"Failed to parse attributes for graph node {key}: {e}",
-                    exc_info=True)
-                attrs = {}
-            return {"key": key, "type": row[0], "attributes": attrs}
-        return None
-
-    def get_graph_neighbors(self, engagement_id: str,
-                            node_key: str) -> list[tuple[str, str]]:
-        self._wait_for_init()
-        rows = self.conn.execute(
-            """SELECT target, rel_type FROM graph_edges WHERE engagement_id=? AND source=?
-               UNION
-               SELECT source, rel_type FROM graph_edges WHERE engagement_id=? AND target=?""",
-            (engagement_id, node_key, engagement_id, node_key)
-        ).fetchall()
-        return [(r[0], r[1]) for r in rows]
+    # P5-8 (D-WIRE-1): add_graph_node/add_graph_edge/get_graph_node/
+    # get_graph_neighbors removed — they backed the write-only AttackGraph
+    # (deleted). The live evidence_graph accessors (store_evidence_graph/
+    # get_evidence_graph, above) are a SEPARATE, consumed system and remain.
 
     def get_cross_engagement_failures(
             self, tool: str | None = None, limit: int = 100) -> list[dict]:

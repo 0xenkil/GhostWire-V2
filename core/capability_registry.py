@@ -13,8 +13,8 @@ from enum import Enum
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 from utils.logger import get_logger
-from core.config_manager import get_config as get_config_manager
-from core.config_loader import get_config  # For YAML-based config
+from core.config_loader import get_config_manager  # P5-2: one config authority
+from core.config_loader import get_config  # For YAML-based config (2-arg getter)
 
 log = get_logger("capability")
 
@@ -1208,6 +1208,28 @@ class CapabilityRegistry:
 
 _registry_instance: Optional[CapabilityRegistry] = None
 _registry_lock = threading.Lock()
+
+# P0-9: lightweight name -> capability keyword lookup, built once from the
+# static ALL_TOOLS table. No registry instantiation (no OS detection / install
+# probing), so it is cheap to call on every tool run for produced_result()'s
+# capability keying. Keyed on both name and binary.
+_PRIMARY_CAP_INDEX: dict[str, str] = {}
+for _t in ALL_TOOLS:
+    _cap = (_t.capabilities[0] if getattr(_t, "capabilities", None)
+            else getattr(getattr(_t, "category", None), "value", ""))
+    for _k in {str(getattr(_t, "name", "")).lower(), str(getattr(_t, "binary", "")).lower()}:
+        if _k:
+            _PRIMARY_CAP_INDEX.setdefault(_k, str(_cap or ""))
+
+
+def tool_primary_capability(name: str) -> str:
+    """Return a tool's primary capability keyword (e.g. 'port_scan',
+    'http_probe', 'discover_subdomains') from the static capability table, or ''
+    if unknown. Used to key ToolResult.produced_result() without a per-tool
+    banner table (P0-9)."""
+    if not name:
+        return ""
+    return _PRIMARY_CAP_INDEX.get(str(name).strip().lower(), "")
 
 
 def get_registry(remote_executor=None, ai=None,

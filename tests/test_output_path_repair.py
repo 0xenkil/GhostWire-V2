@@ -31,6 +31,14 @@ def _fake(calls):
     f._fix_glued_path_flags = lambda c: c
     f._remote_home_dir = "/home/en"
     f._canonical_substitute = lambda p, fl: "/home/en/redteam-workspace/recon_hosts.txt"
+    # The repair loop now checks existence / runs the find-fallback through the
+    # generic local-or-remote seams; bind them so they route through this fake's
+    # Remote.execute (which records `calls`) exactly as the old direct calls did.
+    from tools.tool_manager import ToolManager as _TM
+    f._path_exists = lambda p: _TM._path_exists(f, p)
+    f._exec_on_host = lambda c, timeout=15: _TM._exec_on_host(f, c, timeout)
+    f._ensure_output_dirs = lambda c: _TM._ensure_output_dirs(f, c)
+    f._expand_home_tokens = lambda c: _TM._expand_home_tokens(f, c)
     return f
 
 

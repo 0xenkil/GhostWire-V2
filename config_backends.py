@@ -42,7 +42,13 @@ TOR_ENABLED = os.getenv("TOR_ENABLED", "false").lower() in ("true", "1", "yes")
 TOR_PASSWORD = os.getenv("TOR_CONTROL_PASSWORD", "")
 
 # ─── WSL Settings (replaces VPS) ────────────────────────────────────────
-USE_WSL = os.getenv("USE_WSL", "true").lower() in ("true", "1", "yes")
+# WSL is a Windows-only concept. On a native Linux VPS (the engine's primary
+# deployment target) default USE_WSL OFF so tools run DIRECTLY on the host rather
+# than through a nonexistent `wsl` command (which raised FileNotFoundError: 'wsl'
+# and broke tool checks/installs/execution on the VPS). Explicit env var still wins.
+import platform as _platform
+_use_wsl_default = "true" if _platform.system() == "Windows" else "false"
+USE_WSL = os.getenv("USE_WSL", _use_wsl_default).lower() in ("true", "1", "yes")
 WSL_DISTRO = os.getenv("WSL_DISTRO", "")      # blank = default distro
 WSL_USER = os.getenv("WSL_USER", "")           # blank = default WSL user
 WSL_TEMP_DIR = os.getenv("WSL_TEMP_DIR", "~/redteam-workspace")

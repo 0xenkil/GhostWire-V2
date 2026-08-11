@@ -17,7 +17,15 @@ from typing import Dict, List, Set, Any
 
 
 class OriginDiscovery:
-    """Finds origin server IPs that bypass CDN/WAF"""
+    """Finds origin server IPs that bypass CDN/WAF.
+
+    P5-5: conforms to the WafTechnique contract — run() returns an Evidence|None,
+    and a discovered IP is a CONFIRMED origin bypass only when a direct connection
+    serves the SAME app as the fronted domain (is_proven), never because the IP
+    merely answered.
+    """
+
+    name = "origin_discovery"
 
     def __init__(self, dns_resolver: str = "1.1.1.1"):
         """Initialize origin discovery"""
@@ -25,6 +33,29 @@ class OriginDiscovery:
         self.discovered_ips = set()
         self.discovered_services = {}
         self.port_scan_results = {}
+
+    def run(self, target: str, ctx=None) -> "Optional[object]":
+        """WafTechnique entry point: discover candidate origin IPs and return the
+        Evidence for the FIRST one that proves to be the real origin (its direct
+        response matches the WAF-fronted app). None if none prove out — every
+        candidate that merely responds is a lead, not a confirmation."""
+        import re
+        domain = re.sub(r'^https?://', '', target).split('/')[0]
+        control = self._fetch_fronted_response(domain)
+        disc = self.discover_origin_ips(domain, aggressive=False)
+        for cand in (disc.get("origin_candidates", []) or [])[:5]:
+            ip = cand.get("ip") if isinstance(cand, dict) else cand
+            if not ip:
+                continue
+            probe = {"ip": ip, "domain": domain, "port": 443, "reachable": False,
+                     "ssl_valid": False, "headers_received": {}, "bypass_viable": False}
+            origin_body = self._fetch_origin_response(ip, domain, 443, probe)
+            if not origin_body:
+                continue
+            ev = self._origin_bypass_evidence(control, origin_body, ip, domain)
+            if ev is not None and ev.is_proven():
+                return ev  # first PROVEN origin
+        return None
 
     def discover_origin_ips(
             self, domain: str, aggressive: bool = True) -> Dict[str, Any]:
@@ -427,9 +458,18 @@ class OriginDiscovery:
     def test_origin_connection(
             self, origin_ip: str, domain: str, port: int = 443) -> Dict[str, Any]:
         """
-        Test if we can connect to origin server directly
+        Test if a candidate IP is the real origin behind the WAF.
 
-        Returns whether bypass is successful
+        P5-5 (ORIGIN-STUBS): the old check set ``bypass_viable=True`` the moment
+        ANY bytes came back from the IP — but a random server, a default nginx
+        page, or the CDN itself answers on that IP too. recon_agent then adopts
+        that IP as ``waf_bypass_url``, ADDS IT TO ENGAGEMENT SCOPE, and retargets
+        exploitation — so a wrong IP meant attacking the wrong host. Now the IP is
+        a confirmed origin ONLY when a direct connection serves the SAME
+        application as the WAF-fronted domain (high-similarity differential via
+        the P5-6 ``test_origin_connection`` proof method, gated by is_proven).
+        Merely reachable but not-the-same-app is a LEAD (``reachable=True``,
+        ``bypass_viable=False``).
         """
         result = {
             "ip": origin_ip,
@@ -438,11 +478,27 @@ class OriginDiscovery:
             "reachable": False,
             "ssl_valid": False,
             "headers_received": {},
-            "bypass_viable": False
+            "bypass_viable": False,
         }
 
+        origin_body = self._fetch_origin_response(origin_ip, domain, port, result)
+        if not origin_body:
+            return result  # not reachable / no usable app response → not viable
+
+        from intelligence.waf_bypass.technique import confirmed_bypass
+        control_body = self._fetch_fronted_response(domain)
+        result["bypass_viable"] = confirmed_bypass(
+            self._origin_bypass_evidence(control_body, origin_body, origin_ip, domain))
+        return result
+
+    def _fetch_origin_response(self, origin_ip: str, domain: str, port: int,
+                               result: Dict[str, Any]) -> str:
+        """Raw GET to the candidate origin IP with the real Host header. Populates
+        result[reachable]/[ssl_valid]/[headers_received] and returns the response
+        BODY (''; on any failure). Split out so the proof gating is unit-testable."""
         try:
             import ssl
+            import time
 
             context = ssl.create_default_context()
             context.check_hostname = False
@@ -451,46 +507,62 @@ class OriginDiscovery:
             with socket.create_connection((origin_ip, port), timeout=5) as sock:
                 with context.wrap_socket(sock, server_hostname=domain) as ssock:
                     result["reachable"] = True
-
-                    # Try HTTP request
+                    result["ssl_valid"] = True
+                    # GET (not HEAD) so we get a BODY to compare against the
+                    # fronted app — sameness is what proves this is the origin.
                     ssock.sendall(
-                        f"HEAD / HTTP/1.1\r\nHost: {domain}\r\nConnection: close\r\n\r\n".encode())
+                        f"GET / HTTP/1.1\r\nHost: {domain}\r\nConnection: close\r\n\r\n".encode())
 
                     response = b""
-                    sock_timeout = 5.0
-                    import time
                     start_recv = time.time()
-                    while True:
-                        if time.time() - start_recv > sock_timeout:
-                            break
+                    while time.time() - start_recv <= 5.0:
                         try:
-                            # Use non-blocking or short timeout recv to allow
-                            # time check
                             ssock.settimeout(1.0)
                             chunk = ssock.recv(4096)
                             if not chunk:
                                 break
                             response += chunk
+                            if len(response) > 200000:
+                                break
                         except socket.timeout:
                             continue
-                        except Exception as e:
-                            import logging as __logging_tmp
-                            __logging_tmp.getLogger(__name__).error(
-                                f"Unhandled exception: {e}", exc_info=True)
+                        except Exception:
                             break
 
-                    if response:
-                        result["bypass_viable"] = True
-                        # Parse response headers
-                        headers_str = response.decode(
-                            'utf-8', errors='ignore').split('\r\n\r\n')[0]
-                        for line in headers_str.split('\r\n'):
-                            if ':' in line:
-                                key, val = line.split(':', 1)
-                                result["headers_received"][key.strip()
-                                                           ] = val.strip()
-
+                    raw = response.decode('utf-8', errors='ignore')
+                    head, _, body = raw.partition('\r\n\r\n')
+                    for line in head.split('\r\n'):
+                        if ':' in line:
+                            key, val = line.split(':', 1)
+                            result["headers_received"][key.strip()] = val.strip()
+                    return body
         except Exception as e:
             result["error"] = str(e)
+            return ""
 
-        return result
+    def _fetch_fronted_response(self, domain: str) -> str:
+        """Fetch the WAF-fronted domain's response body (the control/baseline the
+        origin must match). '' on failure — which yields no proof (safe)."""
+        try:
+            import requests
+            r = requests.get(f"https://{domain}/", timeout=8, verify=False,
+                             headers={"User-Agent": "Mozilla/5.0"})
+            return r.text or ""
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).debug(
+                f"fronted baseline fetch failed for {domain}: {e}")
+            return ""
+
+    def _origin_bypass_evidence(self, fronted_body: str, origin_body: str,
+                                origin_ip: str, domain: str):
+        """Build the origin-reachability Evidence via the P5-6 registered proof
+        method (high-similarity artifact). Returns Evidence|None; is_proven only
+        when the direct-origin body matches the fronted app (>=0.9 similarity)."""
+        from core.proof import ProofRegistry, ProofContext
+        return ProofRegistry.build("test_origin_connection", ProofContext(
+            control_response=fronted_body or "",
+            test_response=origin_body or "",
+            command=f"curl --resolve {domain}:443:{origin_ip} https://{domain}/",
+            notes=f"direct origin {origin_ip} vs WAF-fronted {domain}",
+        ))

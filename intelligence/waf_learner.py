@@ -160,8 +160,13 @@ class WafLearner:
             if not isinstance(run, dict):
                 continue
 
-            # Extract tactic info from tool run
-            evasion = run.get("evasion_applied", "none")
+            # Extract tactic info from tool run. P3-3: normalize the batch key
+            # through the SAME canonicalizer as the live block/success path, so a
+            # revived batch pass accumulates onto the same entries (not a second,
+            # differently-cased set). "none"/"" stays the skip sentinel.
+            evasion_raw = run.get("evasion_applied") or "none"
+            evasion = ("none" if str(evasion_raw).strip().lower() in ("none", "")
+                       else self._normalize_tactic(evasion_raw))
             success = run.get("success", False)
 
             tactics_used[evasion]["total"] += 1
@@ -349,6 +354,52 @@ class WafLearner:
             print(f"Error saving fingerprint: {e}")
             return False
 
+    @staticmethod
+    def _normalize_tactic(tactic: Any) -> str:
+        """P3-3 — ONE canonical tactic key so a tactic's successes and failures
+        ALWAYS land on the same DB entry.
+
+        WAFLEARN-KEYSPLIT: the block path debited `str(tactic)` — which is the
+        stringified DICT `"{'name': 'header_mutation'}"` when the tactic is a dict
+        — while the success path credited the hardcoded literal `"header_mutation"`.
+        The two keys never matched, so every tactic's per-WAF success_rate was
+        computed over a split, meaningless denominator. Normalizing both sides
+        through here (dict → its name, then lower/underscore) collapses them onto
+        one key."""
+        if isinstance(tactic, dict):
+            name = tactic.get("name") or tactic.get("tactic") or ""
+        else:
+            name = str(tactic or "")
+        name = name.strip().lower().replace(" ", "_")
+        return name or "unknown"
+
+    def record_outcome(self, outcome: Any, tactic: Any = None,
+                       waf_id: str = "generic") -> bool:
+        """P3-3 — the SINGLE per-run entry point for WAF-tactic learning, so a
+        tactic's credits and debits ALWAYS accumulate under ONE normalized key.
+
+        `outcome` is a `LearningOutcome` (preferred — the credit is then gated on
+        a real proof / clean-execution signal via `.proven`, not merely "the tool
+        exited 0") or a bare bool for the simplest callers. `tactic` names the
+        tactic; when omitted, `outcome.evasion_tactic` is used. Best-effort — the
+        WAF-learning write is telemetry and must never raise into the hot loop."""
+        try:
+            src = tactic if tactic is not None else getattr(
+                outcome, "evasion_tactic", None)
+            name = self._normalize_tactic(src)
+            if name == "unknown":
+                return False
+            if isinstance(outcome, bool):
+                success = outcome
+            else:
+                # LearningOutcome: only a proof-/clean-execution-backed run got
+                # PAST the WAF; a still-blocked or empty run is a tactic failure.
+                success = bool(getattr(outcome, "proven", False))
+            return self.update_tactic_effectiveness(
+                name, success, waf_id=str(waf_id or "generic"))
+        except Exception:
+            return False
+
     def update_tactic_effectiveness(self, tactic_name: str, success: bool,
                                     waf_id: str = "generic") -> bool:
         """Public convenience wrapper used by agents on every block/success.
@@ -358,6 +409,9 @@ class WafLearner:
         outcome, and persist the new totals. Best-effort; never raises.
         """
         try:
+            # P3-3: normalize here too, so even a direct caller (not via
+            # record_outcome) lands on the one canonical key. Idempotent.
+            tactic_name = self._normalize_tactic(tactic_name)
             prev = (
                 self._load_database()
                 .get("tactics", {})

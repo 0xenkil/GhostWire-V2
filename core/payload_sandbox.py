@@ -1,5 +1,18 @@
 import ast
+import os
 from typing import Optional
+
+# P2-5 (SEC-1): real isolation mechanisms, strongest first. Each is a shell prefix
+# that ACTUALLY confines execution (no network + namespace/filesystem isolation).
+# If NONE is present the run is NEVER silently trusted as isolated — it is either
+# refused (require_sandbox) or clearly tagged UNSANDBOXED.
+_ISOLATION_MECHANISMS = [
+    ("firejail", "firejail --quiet --noprofile --net=none --private "
+                 "--rlimit-fsize=104857600 --rlimit-nproc=64"),
+    ("bwrap", "bwrap --unshare-all --die-with-parent --ro-bind / / "
+              "--tmpfs /tmp --proc /proc --dev /dev"),
+    ("unshare", "unshare --map-root-user --net --fork --pid --mount-proc"),
+]
 
 
 class SafePayloadValidator(ast.NodeVisitor):
@@ -66,13 +79,37 @@ class SafePayloadValidator(ast.NodeVisitor):
 
 
 class PayloadSandbox:
-    """Executes validated payload scripts in an isolated subprocess on the VPS."""
+    """Executes validated payload scripts on the VPS, ISOLATED when a sandbox
+    mechanism (firejail/bwrap/unshare) is available on the host. P2-5 (SEC-1): the
+    boundary is NEVER falsely claimed — if no mechanism is present the run is
+    tagged ``[UNSANDBOXED]`` (or refused when isolation is required), so no
+    consumer trusts a boundary that isn't there."""
 
     def __init__(self, tool_manager=None):
         self.validator = SafePayloadValidator()
         self.tool_manager = tool_manager
 
-    def run(self, script_code: str, proxy: Optional[str] = None) -> str:
+    def _have_binary(self, name: str) -> bool:
+        """Is ``name`` present on the EXECUTION host (remote if configured, else local)?"""
+        try:
+            if getattr(self.tool_manager, "remote", None):
+                ec, out, _ = self.tool_manager.remote.execute(f"command -v {name}")
+                return ec == 0 and bool((out or "").strip())
+            import shutil
+            return shutil.which(name) is not None
+        except Exception:
+            return False
+
+    def detect_isolation(self):
+        """Return ``(mechanism, prefix)`` for the strongest AVAILABLE isolation
+        tool, or ``(None, "")`` if none — never assumes one exists."""
+        for name, prefix in _ISOLATION_MECHANISMS:
+            if self._have_binary(name):
+                return name, prefix
+        return None, ""
+
+    def run(self, script_code: str, proxy: Optional[str] = None,
+            require_sandbox: Optional[bool] = None) -> str:
         if not self.tool_manager:
             return "Blocked: Sandbox requires tool_manager for remote execution."
 
@@ -83,11 +120,22 @@ class PayloadSandbox:
         if not self.validator.is_safe:
             return f"Blocked: Dangerous statements detected: {', '.join(self.validator.errors)}"
 
-        # 2. Execute securely over SSH on remote VPS
+        # 2. Establish REAL isolation (P2-5). Fail-closed: if the operator requires
+        # a sandbox and none can be established, refuse rather than run unconfined.
+        mechanism, prefix = self.detect_isolation()
+        sandboxed = mechanism is not None
+        if require_sandbox is None:
+            require_sandbox = os.getenv(
+                "REQUIRE_SANDBOX", "false").strip().lower() in ("1", "true", "yes")
+        if require_sandbox and not sandboxed:
+            return ("Blocked: sandbox REQUIRED but no isolation mechanism "
+                    "(firejail/bwrap/unshare) is available on the host — refusing "
+                    "to execute UNSANDBOXED (SEC-1 fail-closed).")
+
+        # 3. Execute on the VPS, wrapped in the isolation prefix when available.
         import uuid
         remote_file = f"/tmp/sandbox_{uuid.uuid4().hex[:8]}.py"
         try:
-            # Write file to remote using remote_executor or locally
             if getattr(self.tool_manager, 'remote', None):
                 self.tool_manager.remote.upload_content(
                     script_code, remote_file)
@@ -95,19 +143,22 @@ class PayloadSandbox:
                 with open(remote_file, 'w', encoding='utf-8') as f:
                     f.write(script_code)
 
-            # Execute it via tool_manager bash runner
             import shlex
             quoted_remote_file = shlex.quote(remote_file)
-            cmd = f"python3 {quoted_remote_file}"
+            inner = f"timeout 120 python3 {quoted_remote_file}"
             if proxy:
                 quoted_proxy = shlex.quote(proxy)
-                cmd = f"HTTP_PROXY={quoted_proxy} HTTPS_PROXY={quoted_proxy} {cmd}"
+                inner = f"HTTP_PROXY={quoted_proxy} HTTPS_PROXY={quoted_proxy} {inner}"
+            cmd = f"{prefix} {inner}" if sandboxed else inner
 
             res = self.tool_manager.run("bash", cmd, "sandbox", silent=True)
             output = res.stdout if res else ""
             if res and res.stderr:
                 output += f"\n[STDERR]\n{res.stderr}"
-            return output if output else "Execution completed with no output."
+            # Tag the provenance honestly so no consumer mistakes unconfined output
+            # for isolated output.
+            label = f"[SANDBOXED:{mechanism}]" if sandboxed else "[UNSANDBOXED]"
+            return f"{label}\n" + (output if output else "Execution completed with no output.")
         except Exception as e:
             return f"Blocked: Execution failed: {str(e)}"
         finally:
@@ -115,7 +166,6 @@ class PayloadSandbox:
                 if getattr(self.tool_manager, 'remote', None):
                     self.tool_manager.remote.execute(f"rm -f {remote_file}")
                 else:
-                    import os
                     if os.path.exists(remote_file):
                         os.remove(remote_file)
             except Exception as _e:

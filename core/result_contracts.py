@@ -90,6 +90,19 @@ class ToolResult:
     partial_output: bool = field(default=False)
     parsed: dict = field(default_factory=dict)
 
+    # P0-10: the state-store tool_runs.id assigned when this run was persisted.
+    # Lets an agent stamp any finding derived from this run with an EXACT
+    # originating-run link (state_store.add_finding(tool_run_id=...)). None until
+    # the run is logged.
+    tool_run_id: Optional[int] = None
+
+    # P3-3: the normalized WAF-evasion tactic applied to THIS run (e.g.
+    # "header_mutation", "ip_rotation"), or None when the command ran without
+    # evasion. Persisted to tool_runs.evasion_applied so the batch WAF learner
+    # (learn_from_engagement) can attribute per-tactic effectiveness from the
+    # durable run log instead of a phase_data key that was never populated.
+    evasion_applied: Optional[str] = None
+
     def __post_init__(self):
         if isinstance(self.status, str):
             try:
@@ -155,6 +168,51 @@ class ToolResult:
                                ResultStatus.FALLBACK_SUCCESS,
                                ResultStatus.PARTIAL):
                 self.status = ResultStatus.FAILURE
+
+    def produced_result(self, capability: str = "") -> bool:
+        """P0-9 — capability-keyed, PARSED-field result-presence predicate.
+
+        Answers "did this run actually produce the KIND of result its capability
+        implies?", derived from the structured ``parsed`` output — NOT a per-tool
+        banner table and NOT raw stdout length. It is distinct from ``success``
+        (a status) and from "differs from baseline": a fetch that GETS A RESPONSE
+        produced a result even if that response equals the baseline. Callers pass
+        the tool's capability so a banner-only nmap (`exit 0`, no parsed ports)
+        reads as NO_FINDINGS, while a whatweb-behind-a-WAF partial still counts.
+        """
+        p = self.parsed if isinstance(self.parsed, dict) else {}
+
+        def _nonempty(*keys) -> bool:
+            for k in keys:
+                v = p.get(k)
+                if isinstance(v, (list, dict, set, tuple)) and len(v) > 0:
+                    return True
+                if isinstance(v, bool) and v:
+                    return True
+            return False
+
+        cap = (capability or "").strip().lower()
+        # Scanners: real ports / services / findings / vulns parsed.
+        if any(t in cap for t in ("scan", "port", "vuln")):
+            return _nonempty("open_ports", "services", "port_details",
+                             "findings", "vulnerabilities")
+        # Discovery / enumeration / fingerprint: a non-empty parsed asset list.
+        if any(t in cap for t in ("discover", "recon", "enum", "crawl",
+                                  "fingerprint", "subdomain", "brute", "dir")):
+            return _nonempty("subdomains", "discovered_paths", "hosts",
+                             "live_hosts", "discovered_urls", "technologies",
+                             "emails", "credentials", "users", "is_behind_waf")
+        # Fetch / HTTP: GOT A RESPONSE (a body), NOT a differential.
+        if any(t in cap for t in ("fetch", "http", "request", "curl", "probe")):
+            return len((self.stdout or "").strip()) > 0
+
+        # Unknown capability: any non-empty parsed collection counts; else fall
+        # back to a non-trivial body. This is the generic honest signal — no
+        # per-tool table.
+        for v in p.values():
+            if isinstance(v, (list, dict, set, tuple)) and len(v) > 0:
+                return True
+        return len((self.stdout or "").strip()) > 0
 
     @property
     def duration(self) -> float:
@@ -655,15 +713,33 @@ class Evidence:
     baseline_excerpt: str = ""      # the control/normal response (truncated)
     differential: str = ""          # concrete description of what differs
     similarity_to_baseline: float = -1.0  # -1 = not measured
+    # P0-1: per-type persisted measurements that is_proven() now REQUIRES, so a
+    # proof can no longer be forged by setting proof_type alone
+    # (closes EVIDENCE-ISPROVEN-FORGEABLE).
+    control_absent: bool = False  # artifact: proving content ABSENT in control/baseline
+    test_present: bool = False    # artifact: proving content PRESENT in the test response
+    oob_token: str = ""                    # unique out-of-band token actually observed
     notes: str = ""
 
     def is_proven(self) -> bool:
-        """True only when this evidence actually demonstrates impact."""
+        """True only when this evidence carries a MEASURED demonstration of
+        impact — P0-1 hardened. ``proof_type`` alone is never sufficient; each
+        type requires its persisted measurement, closing
+        EVIDENCE-ISPROVEN-FORGEABLE.
+        """
         if self.proof_type == "differential":
-            # a real differential means NOT near-identical to baseline
-            return bool(self.differential) and (
-                self.similarity_to_baseline < 0 or self.similarity_to_baseline < 0.97)
-        return self.proof_type in ("artifact", "oob")
+            # Must be MEASURED (>= 0.0) and materially different from baseline.
+            # The old `similarity < 0` branch trusted an unmeasured, AI-described
+            # delta — a forgery hole — and is deliberately removed: no baseline
+            # measurement now means LEAD, not proof.
+            return bool(self.differential) and (0.0 <= self.similarity_to_baseline < 0.97)
+        if self.proof_type == "artifact":
+            # The proving content must be ABSENT in control and PRESENT in test.
+            return bool(self.control_absent and self.test_present)
+        if self.proof_type == "oob":
+            # A real out-of-band callback carries a unique token that was observed.
+            return bool(self.oob_token)
+        return False
 
     def to_dict(self) -> dict:
         return {
@@ -674,6 +750,9 @@ class Evidence:
             "baseline_excerpt": self.baseline_excerpt[:1000],
             "differential": self.differential[:800],
             "similarity_to_baseline": self.similarity_to_baseline,
+            "control_absent": self.control_absent,
+            "test_present": self.test_present,
+            "oob_token": self.oob_token[:200],
             "notes": self.notes[:500],
         }
 
@@ -689,6 +768,9 @@ class Evidence:
             baseline_excerpt=d.get("baseline_excerpt", ""),
             differential=d.get("differential", ""),
             similarity_to_baseline=float(d.get("similarity_to_baseline", -1.0)),
+            control_absent=bool(d.get("control_absent", False)),
+            test_present=bool(d.get("test_present", False)),
+            oob_token=d.get("oob_token", ""),
             notes=d.get("notes", ""),
         )
 
